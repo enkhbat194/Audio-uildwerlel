@@ -1,0 +1,365 @@
+import {
+  AlertTriangle,
+  Check,
+  Pause,
+  Play,
+  Repeat,
+  Volume2,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { AudioJobReceipt, QaRecord, QaStatus, SourceRow } from '../shared/types';
+import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
+
+interface ListeningQaViewProps {
+  sources: SourceRow[];
+  jobs: Record<string, AudioJobReceipt>;
+  qa: Record<string, QaRecord>;
+  selectedSourceId: string;
+  onSelectSourceId: (id: string) => void;
+  onSaveQa: (sourceId: string, payload: { listening_qa: QaStatus; issue_category: string; notes: string }) => Promise<void>;
+}
+
+export function ListeningQaView({
+  sources,
+  jobs,
+  qa,
+  selectedSourceId,
+  onSelectSourceId,
+  onSaveQa,
+}: ListeningQaViewProps) {
+  const activeSource = sources.find((s) => s.source_id === selectedSourceId) ?? sources[0];
+  const activeJob = activeSource ? jobs[activeSource.source_id] : undefined;
+  const activeQa = activeSource ? qa[activeSource.source_id] : undefined;
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [listenSpeed, setListenSpeed] = useState<1 | 0.75>(1);
+
+  const [qaStatus, setQaStatus] = useState<QaStatus>(activeQa?.listening_qa ?? 'QA_PENDING');
+  const [issueCategory, setIssueCategory] = useState(activeQa?.issue_category ?? '');
+  const [notes, setNotes] = useState(activeQa?.notes ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    setQaStatus(activeQa?.listening_qa ?? 'QA_PENDING');
+    setIssueCategory(activeQa?.issue_category ?? '');
+    setNotes(activeQa?.notes ?? '');
+    setSaveFeedback(null);
+    setIsPlaying(false);
+  }, [activeSource?.source_id, activeQa?.updated_at]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = listenSpeed;
+      audioRef.current.loop = loopEnabled;
+    }
+  }, [listenSpeed, loopEnabled]);
+
+  const playable = Boolean(activeJob && (activeJob.status === 'MOCK' || activeJob.status === 'REAL_SUCCESS'));
+  const audioSrc = playable && activeJob ? `/api/audio/${encodeURIComponent(activeJob.filename)}?v=${encodeURIComponent(activeJob.updated_at)}` : undefined;
+
+  function togglePlay() {
+    if (!audioRef.current || !audioSrc) return;
+    if (audioRef.current.paused) {
+      audioRef.current.playbackRate = listenSpeed;
+      audioRef.current.loop = loopEnabled;
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    } else {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  }
+
+  async function handleSubmitQa(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeSource) return;
+    setIsSaving(true);
+    setSaveFeedback(null);
+    try {
+      await onSaveQa(activeSource.source_id, {
+        listening_qa: qaStatus,
+        issue_category: issueCategory,
+        notes,
+      });
+      setSaveFeedback('QA үнэлгээ хадгалагдлаа.');
+    } catch {
+      setSaveFeedback('QA хадгалахад алдаа гарлаа.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (!activeSource) {
+    return (
+      <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        Шалгах өгүүлбэр олдсонгүй.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          Сонсож шалгах (Listening QA)
+        </h1>
+        <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
+          Өгүүлбэр бүрийг сонсож, эх чех тексттэй тулгаад хүний QA дүнг бүртгэнэ.
+        </p>
+      </div>
+
+      {/* Mandatory Technical Validity vs Linguistic Accuracy Disclaimer */}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+        <p className="text-xs md:text-sm text-amber-950 dark:text-amber-200">
+          <strong>Анхаар:</strong> WAV дохио хүчинтэй (PCM16, 24kHz) гэдэг нь чех уугуул дуудлага зөв гэсэн үг биш. Автомат дуудлагын баталгаа байхгүй тул хүн заавал сонсож баталгаажуулна.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left: Selector List */}
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden">
+          {sources.map((row) => {
+            const selected = row.source_id === activeSource.source_id;
+            const rowJob = jobs[row.source_id];
+            const rowQa = qa[row.source_id];
+            return (
+              <button
+                key={row.source_id}
+                type="button"
+                onClick={() => onSelectSourceId(row.source_id)}
+                className={`w-full text-left p-4 transition-colors cursor-pointer space-y-1.5 ${
+                  selected
+                    ? 'bg-sky-50/90 dark:bg-sky-950/40'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{row.source_id}</span>
+                  <QaStatusLabel status={rowQa?.listening_qa ?? 'QA_PENDING'} />
+                </div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
+                  {row.cs_exact}
+                </p>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <JobStatusLabel status={rowJob?.status ?? 'PENDING'} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: Player, Signal Metadata, and QA Form */}
+        <div className="lg:col-span-8 space-y-6">
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                <span>{activeSource.source_id}</span>
+                <span> · </span>
+                <span>{activeSource.lesson_id}</span>
+                <span> · </span>
+                <span>{activeSource.source_gate}</span>
+              </div>
+              <JobStatusLabel status={activeJob?.status ?? 'PENDING'} />
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Тулгах чех өгүүлбэр (Зөвхөн унших)</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-50">{activeSource.cs_exact}</p>
+            </div>
+
+            {playable && audioSrc ? (
+              <div className="space-y-4">
+                <audio
+                  ref={audioRef}
+                  src={audioSrc}
+                  onEnded={() => {
+                    if (!loopEnabled) setIsPlaying(false);
+                  }}
+                  onPause={() => setIsPlaying(false)}
+                  onPlay={() => setIsPlaying(true)}
+                  controls
+                  className="w-full"
+                />
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="min-h-[44px] px-5 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 text-white text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    <span>{isPlaying ? 'Зогсоох' : 'Тоглуулах'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLoopEnabled((v) => !v)}
+                    aria-pressed={loopEnabled}
+                    className={`min-h-[44px] px-4 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer ${
+                      loopEnabled
+                        ? 'border-sky-600 bg-sky-50 dark:bg-sky-950/50 text-sky-800 dark:text-sky-300'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <Repeat className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Давтах {loopEnabled ? '(Асаалттай)' : ''}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setListenSpeed((s) => (s === 1 ? 0.75 : 1))}
+                    className={`min-h-[44px] px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${
+                      listenSpeed === 0.75
+                        ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {listenSpeed === 0.75 ? '0.75x (Зөвхөн сонсоход)' : '1.0x Хэвийн'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
+                <Volume2 className="w-6 h-6 text-slate-400 mx-auto" aria-hidden="true" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Энэ өгүүлбэрт WAV файл үүсээгүй байна.
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Үйлдвэрлэл хэсгээс аудио үүсгэсний дараа энд тоглуулж шалгана уу.
+                </p>
+              </div>
+            )}
+
+            {/* Recording Signal Metadata */}
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+              <div>
+                <dt className="text-slate-500 dark:text-slate-400">Sample rate / Суваг</dt>
+                <dd className="font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                  {activeJob?.sample_rate ? `${activeJob.sample_rate} Hz · Mono` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 dark:text-slate-400">Формат / Хугацаа</dt>
+                <dd className="font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                  {activeJob?.duration_ms ? `PCM16 · ${activeJob.duration_ms} ms` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 dark:text-slate-400">Хэмжээ</dt>
+                <dd className="font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                  {activeJob?.file_size ? `${(activeJob.file_size / 1024).toFixed(1)} KB` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 dark:text-slate-400">Peak / RMS</dt>
+                <dd className="font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                  {activeJob?.peak_dbfs !== null && activeJob?.peak_dbfs !== undefined
+                    ? `${activeJob.peak_dbfs} / ${activeJob.rms_dbfs} dBFS`
+                    : '—'}
+                </dd>
+              </div>
+              <div className="col-span-2 sm:col-span-4">
+                <dt className="text-slate-500 dark:text-slate-400">WAV SHA256</dt>
+                <dd className="font-mono text-slate-900 dark:text-slate-100 break-all mt-0.5">
+                  {activeJob?.audio_sha256 ?? '—'}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* Human QA Form */}
+          <form
+            onSubmit={handleSubmitQa}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4"
+          >
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
+              Хүний QA үнэлгээ бүртгэх
+            </h2>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(['QA_PENDING', 'PASS', 'REVIEW', 'FAIL'] as QaStatus[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setQaStatus(opt)}
+                  className={`min-h-[44px] px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                    qaStatus === opt
+                      ? 'border-sky-600 bg-sky-50 dark:bg-sky-950/50 text-sky-900 dark:text-sky-200'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="qa-category" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Алдаа / Ангилал
+                </label>
+                <select
+                  id="qa-category"
+                  value={issueCategory}
+                  onChange={(e) => setIssueCategory(e.target.value)}
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100"
+                >
+                  <option value="">Сонгох (заавал биш)</option>
+                  <option value="pronunciation_error">Дуудлага буруу</option>
+                  <option value="vowel_length">Эгшгийн урт/богино алдаа</option>
+                  <option value="stress_prosody">Өргөлт ба хэмнэл</option>
+                  <option value="audio_artifact">Дууны шуугиан / тасалдал</option>
+                  <option value="verified_clean">Цэвэр, ойлгомжтой</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Нийтлэлтийн төлөв
+                </label>
+                <div className="min-h-[44px] px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-400 flex items-center">
+                  BLOCKED_FOR_RELEASE (Дотоод пилот)
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="qa-notes" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Сонссон тэмдэглэл
+              </label>
+              <textarea
+                id="qa-notes"
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Жишээ нь: ř / ů дуудлага тодорхой, төгсгөл огцом тасраагүй..."
+                className="w-full p-3 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                {saveFeedback && (
+                  <>
+                    <Check className="w-4 h-4" aria-hidden="true" />
+                    <span>{saveFeedback}</span>
+                  </>
+                )}
+              </span>
+
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white text-sm font-semibold cursor-pointer"
+              >
+                {isSaving ? 'Хадгалж байна...' : 'QA хадгалах'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}

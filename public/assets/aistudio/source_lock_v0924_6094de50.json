@@ -1,0 +1,63 @@
+{
+  "source_csv_sha256": "d0c95af89502d3e0a75bd9fddb77810f361e68aeca21f8535d45fcea7a2f9edc",
+  "curriculum_json_sha256": "bf6de3f4872353d13768e79cb53299bfe1927ca3927209334df3e7e548860a03",
+  "dataset_version": "v0.9.20",
+  "verification": "Exact content_id+cs_text in canonical 72 lessons AND v0920 1050 source refs; not approval for release",
+  "rows": [
+    {
+      "pilot_order": 1,
+      "source_id": "CZ-A0-M01-L01-PH001",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Dobrý den.",
+      "text_sha256": "d00f594ba38748a33a764dcbb341c5618ef80c4a8a49821e00dd9226088dd370",
+      "audio_text_key": "AUDIO-TEXT-D00F594BA38748",
+      "source_gate": "language_prosody_review",
+      "source_safe_to_submit": false,
+      "publish_allowed": false
+    },
+    {
+      "pilot_order": 2,
+      "source_id": "CZ-A0-M01-L01-PH003",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Jak se jmenujete?",
+      "text_sha256": "9e2b678bd1e7e3de4649ffb6c1d376649a2dc46d0b05e2a99994d784a99f54b3",
+      "audio_text_key": "AUDIO-TEXT-9E2B678BD1E7E3",
+      "source_gate": "language_prosody_review",
+      "source_safe_to_submit": false,
+      "publish_allowed": false
+    },
+    {
+      "pilot_order": 3,
+      "source_id": "CZ-A0-M01-L01-PH004",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Jsem z Mongolska.",
+      "text_sha256": "d12e5e94df47f400714004765a2836caf6a47fa9eda075ec03f51924cc45881f",
+      "audio_text_key": "AUDIO-TEXT-D12E5E94DF47F4",
+      "source_gate": "language_prosody_review",
+      "source_safe_to_submit": false,
+      "publish_allowed": false
+    },
+    {
+      "pilot_order": 4,
+      "source_id": "CZ-A0-M01-L01-PH005",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Nerozumím.",
+      "text_sha256": "3dbe64054c73f1083313d5fb2f9b4a01edee2bf952835dd7cac380c247055985",
+      "audio_text_key": "AUDIO-TEXT-3DBE64054C73F1",
+      "source_gate": "language_prosody_review",
+      "source_safe_to_submit": false,
+      "publish_allowed": false
+    },
+    {
+      "pilot_order": 5,
+      "source_id": "CZ-A0-M01-L01-PH006",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Můžete to prosím zopakovat?",
+      "text_sha256": "bf9d9632e1e849fe8ff45221db6602068258960c39055955cc6450e598ebb7ef",
+      "audio_text_key": "AUDIO-TEXT-BF9D9632E1E849",
+      "source_gate": "BLOCK_DOMAIN",
+      "source_safe_to_submit": false,
+      "publish_allowed": false
+    }
+  ]
+}

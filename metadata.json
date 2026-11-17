@@ -1,0 +1,6 @@
+{
+  "name": "Ahoj Česko — Audio Factory",
+  "description": "Owner-only production tool for generating Czech pronunciation WAV files via Vertex AI, performing human listening QA, and exporting verified manifests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
