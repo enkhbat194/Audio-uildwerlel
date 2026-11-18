@@ -1,0 +1,17 @@
+# EXPERIMENT ONLY — never attach the production hostname, GCS bucket, or credentials.
+# Render free-tier proof of hosting the existing React + Express Audio Factory.
+# Real Vertex AI TTS intentionally remains unavailable without keyless workload identity.
+services:
+  - type: web
+    name: ahoj-audio-factory-free-poc
+    runtime: node
+    region: oregon
+    plan: free
+    branch: experiment/free-hosting-render-20261118
+    autoDeployTrigger: off
+    buildCommand: bun install --frozen-lockfile && bun run build
+    startCommand: bun run server.ts
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
