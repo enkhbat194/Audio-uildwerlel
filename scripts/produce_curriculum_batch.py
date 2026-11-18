@@ -106,6 +106,20 @@ def voice_direction(row, style):
             "clearly and warmly, while linking the syllables naturally without exaggerated gaps.")
 
 
+def is_verified_phonetic_homophone(row, heard):
+    """Whitelist ONE Czech homophone in its verified dialogue context.
+
+    Czech grammar reference: https://ufal.mff.cuni.cz/~hana/bib/hana-diss-ch4-CzechClitics.pdf
+    There is NO generic Czech orthographic normalization here.
+    """
+    from auto_audio_qa import normalize
+    return (
+        row.get("source_id") == "CZ-A0-M01-L01-B01-T06"
+        and row.get("cs_exact") == "Mě také."
+        and normalize(heard) == "mně také"
+    )
+
+
 def automated_quality(path, row, style, small_model, medium_state):
     # A machine PASS verifies audio integrity / transcript / basic pacing, not native phonology.
     technical = inspect_wav(path)
@@ -126,15 +140,24 @@ def automated_quality(path, row, style, small_model, medium_state):
     if quality["exact"]:
         return {"decision": "AUTO_PASS", "technical": technical, "recognized_text": heard,
                 "asr_model": "small", "accuracy": quality}
+    # Czech mě and mně are pronounced identically [mɲɛ]. This is a
+    # narrowly-scoped spoken-audio exception for the exact verified B01-T06 line.
+    # The source orthography still remains "Mě také." in the curriculum.
+    if is_verified_phonetic_homophone(row, heard):
+        return {"decision": "AUTO_PASS", "technical": technical, "recognized_text": heard,
+                "asr_model": "small", "accuracy": quality,
+                "phonetic_equivalence": "mě/mně [mɲɛ]; source spelling unchanged"}
     # Second ASR pass is automatic; no owner review.
     try:
         if medium_state["model"] is None:
             medium_state["model"] = asr_engine("medium")
         heard2 = transcribe(medium_state["model"], path)
         quality2 = score_text(row["cs_exact"], heard2)
-        return {"decision": "AUTO_PASS" if quality2["exact"] else "QUARANTINED",
+        equivalent = is_verified_phonetic_homophone(row, heard2)
+        return {"decision": "AUTO_PASS" if quality2["exact"] or equivalent else "QUARANTINED",
                 "technical": technical, "recognized_text": heard2, "asr_model": "medium",
-                "accuracy": quality2, "initial_asr": heard, "initial_accuracy": quality}
+                "accuracy": quality2, "initial_asr": heard, "initial_accuracy": quality,
+                "phonetic_equivalence": "mě/mně [mɲɛ]; source spelling unchanged" if equivalent else None}
     except Exception as exc:
         return {"decision": "QUARANTINED", "technical": technical, "recognized_text": heard,
                 "asr_model": "small", "accuracy": quality, "reason": "FALLBACK_ASR_ERROR",
@@ -151,6 +174,8 @@ def main():
                    help="Restrict a correction to one previously authorized voice style")
     p.add_argument("--repair-jm", action="store_true",
                    help="Correct the documented initial jm-cluster omission in PH003")
+    p.add_argument("--repair-bat", action="store_true",
+                   help="Correct the observed added -u suffix to proper name Bat in dialogue B01-T02")
     args = p.parse_args()
     cfg = source_validate(args.manifest)
     if bool(args.only_source) != bool(args.only_style):
@@ -162,6 +187,8 @@ def main():
             raise SystemExit("UNKNOWN_OR_UNAUTHORIZED_SOURCE")
     if args.repair_jm and (args.only_source != "CZ-A0-M01-L01-PH003" or args.only_style != "natural"):
         p.error("--repair-jm requires only PH003 Natural")
+    if args.repair_bat and (args.only_source != "CZ-A0-M01-L01-B01-T02" or args.only_style != "natural"):
+        p.error("--repair-bat requires only B01-T02 Natural")
     count = len(cfg["rows"]) * len(cfg["variants"])
     print("AHOJ_FIRST_LESSON_BATCH_READY", cfg["batch_id"], "sources", len(cfg["rows"]),
           "TTS_calls", count, "private_only", True)
@@ -204,6 +231,10 @@ def main():
                     direction += (" Pay attention to the distinct initial Czech consonant sequence "
                                   "j-m in the word jmenujete. Pronounce that word fully and naturally; "
                                   "do not omit its first consonant or add any explanatory words.")
+                if args.repair_bat:
+                    direction += (" The person's name is BAT, pronounced as one crisp syllable "
+                                  "with a final T consonant; NOT BATU. Do not insert a vowel "
+                                  "or a grammatical case ending after that proper name.")
                 print("GENERATE", uid, style, flush=True)
                 report["attempted_calls"] += 1
                 cast_voice = source.get("voice", VOICE)
