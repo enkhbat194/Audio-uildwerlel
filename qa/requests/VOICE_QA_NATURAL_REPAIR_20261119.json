@@ -1,0 +1,10 @@
+{
+  "request_id": "VOICE_QA_NATURAL_REPAIR_20261119",
+  "reason": "Automatic small+medium Czech ASR both heard 'dostanou' vs exact source 'dostanu' on Natural; re-render once with clarity prompt",
+  "source_text_unchanged": "Můžete mi prosím říct, kde je nejbližší autobusová zastávka a jak se tam dostanu?",
+  "style_to_render": "natural",
+  "max_billable_calls": 1,
+  "automatic_qa": true,
+  "expected_release": "QA-only, not canonical curriculum, no GCS or Drive upload",
+  "request_status": "ONE_SHOT"
+}
