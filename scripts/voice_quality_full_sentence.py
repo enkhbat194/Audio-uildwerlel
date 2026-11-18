@@ -88,7 +88,7 @@ def post_json(url, body, token, content_type="application/json", method="POST"):
         raise RuntimeError(f"HTTP {exc.code}: {message}") from exc
 
 
-def fetch_audio(style_name, style_prompt, token, text=TEXT):
+def fetch_audio(style_name, style_prompt, token, text=TEXT, voice=VOICE):
     request_body = {
         "contents": [{
             "role": "user",
@@ -99,7 +99,7 @@ def fetch_audio(style_name, style_prompt, token, text=TEXT):
         }],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"voice": VOICE}}
+            "speechConfig": {"voiceConfig": {"voice": voice}}
         },
     }
     response = post_json(
