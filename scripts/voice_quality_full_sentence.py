@@ -88,12 +88,12 @@ def post_json(url, body, token, content_type="application/json", method="POST"):
         raise RuntimeError(f"HTTP {exc.code}: {message}") from exc
 
 
-def fetch_audio(style_name, style_prompt, token):
+def fetch_audio(style_name, style_prompt, token, text=TEXT):
     request_body = {
         "contents": [{
             "role": "user",
             "parts": [{
-                "text": TEXT,
+                "text": text,
                 "speechMetadata": {"style": style_prompt}
             }],
         }],
