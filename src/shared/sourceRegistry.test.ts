@@ -262,3 +262,41 @@ test('Drive export gate rejects stale QA approvals after WAV regeneration', () =
   assert.equal(isJobDriveEligible(goodJob, { [key]: { ...goodQA, audio_sha256: undefined } }), false);
   assert.equal(isJobDriveEligible(goodJob, { [key]: { ...goodQA, receipt_key: 'wrong-receipt' } }), false);
 });
+
+
+test('Drive sync is blocked for BLOCK_DOMAIN, mismatched hash or dataset', () => {
+  const key = getVariantKey('CZ-A0-M01-L01-PH006', 'natural');
+  const source = SEED_FIRST_FIVE_ROWS[4];
+  const job = {
+    receipt_key: key,
+    source_id: source.source_id,
+    dataset_version: source.dataset_version,
+    cs_exact_sha256: source.text_sha256,
+    speech_style: 'natural',
+    style_version: 'v1',
+    status: 'REAL_SUCCESS',
+    is_mock: false,
+    stale: false,
+    storage_backend: 'gcs-private-bucket',
+    audio_sha256: 'same-wav',
+  } as AudioJobReceipt;
+  const qa: QaRecord = {
+    qa_key: key,
+    source_id: source.source_id,
+    receipt_key: key,
+    speech_style: 'natural',
+    style_version: 'v1',
+    audio_sha256: 'same-wav',
+    listening_qa: 'PASS',
+    publication_gate: 'BLOCKED_FOR_RELEASE',
+    issue_category: '',
+    notes: '',
+    reviewer: 'owner',
+    updated_at: '2026-11-18T00:00:00Z',
+  };
+  assert.equal(isJobDriveEligible(job, { [key]: qa }, source), false);
+  const clearGateSource = { ...source, source_gate: 'language_prosody_review' };
+  assert.equal(isJobDriveEligible(job, { [key]: qa }, clearGateSource), true);
+  assert.equal(isJobDriveEligible({ ...job, cs_exact_sha256: 'wrong-hash' }, { [key]: qa }, clearGateSource), false);
+  assert.equal(isJobDriveEligible({ ...job, dataset_version: 'other-version' }, { [key]: qa }, clearGateSource), false);
+});
