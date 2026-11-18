@@ -36,6 +36,13 @@ jobs:
         run: bun run test
       - name: Build Vite distribution
         run: bun run build
+      - name: Verify WIF bootstrap is dry-run by default
+        run: |
+          bash -n scripts/bootstrap-github-wif.sh
+          bash scripts/bootstrap-github-wif.sh > /tmp/wif-dry-run.txt
+          grep -q 'DRY RUN' /tmp/wif-dry-run.txt
+          grep -q 'No service account JSON keys' /tmp/wif-dry-run.txt
+          grep -q 'ahoj-gh-preflight' /tmp/wif-dry-run.txt
       - name: Confirm build artifact
         run: test -f dist/index.html
       - name: Build isolated Render preview and inspect output
