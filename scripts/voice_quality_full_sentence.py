@@ -170,7 +170,13 @@ def main():
                         help="Perform TWO real, potentially billable Vertex TTS calls")
     parser.add_argument("--artifact-only", action="store_true",
                         help="Save local WAV+receipt only; no Cloud Storage operations")
+    parser.add_argument("--only-style", choices=["natural", "learning_slow"],
+                        help="One-time bounded retry: synthesize only one style.")
+    parser.add_argument("--natural-repair", action="store_true",
+                        help="Keep exact text but request clearer Czech morphological endings.")
     args = parser.parse_args()
+    if args.natural_repair and args.only_style != "natural":
+        parser.error("--natural-repair requires --only-style natural")
     print_plan()
     if not args.generate:
         print("DRY_RUN_OK — no TTS, no GCS writes.")
@@ -197,8 +203,17 @@ def main():
         "no_drive_sync": True,
         "variants": {},
     }
-    print("Creating exactly two different full-sentence WAVs; NO retries.")
-    for name, prompt in STYLES.items():
+    print("Creating exactly one or two separate full-sentence WAVs; NO automatic repeats.")
+    wanted_styles = [args.only_style] if args.only_style else list(STYLES)
+    for name in wanted_styles:
+        prompt = STYLES[name]
+        if args.natural_repair and name == "natural":
+            prompt = (
+                "Authentic warm conversational Czech, measured and clear. "
+                "Speak the provided Czech sentence exactly, without word substitution. "
+                "Articulate first-person verb endings distinctly (not as third-person plural); "
+                "preserve natural prosody, vowel lengths and interrogative intonation."
+            )
         print("TTS request:", name, "(one request)")
         try:
             wav_bytes, metadata = fetch_audio(name, prompt, token)
@@ -232,7 +247,7 @@ def main():
     receipt_bytes = json.dumps(receipt, indent=2, ensure_ascii=False).encode("utf-8")
     receipt_file.write_bytes(receipt_bytes)
     if args.artifact_only:
-        print("FULL_SENTENCE_QA_READY — two WAVs saved for private GitHub artifact; QA REVIEW.")
+        print("FULL_SENTENCE_QA_READY — selected WAV(s) saved for private GitHub artifact; QA REVIEW.")
         print("LOCAL:", out_dir)
         return
     try:
