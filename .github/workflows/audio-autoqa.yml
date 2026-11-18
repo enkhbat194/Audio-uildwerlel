@@ -1,6 +1,6 @@
 name: Audio Factory - automatic audio QA
 # No TTS calls, Google Cloud permissions, human review, or manual PASS clicks.
-# One-time validation of the existing one-style Natural repair; keep original source unchanged.
+# Re-evaluate the fluent-v2 WAVs after correcting waveform duration calculations; no new TTS requests.
 on:
   push:
     branches:
@@ -28,9 +28,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           mkdir -p /tmp/ahoj-qa-input
-          gh run download 44394284052 -n ahoj-natural-auto-repair-44394284052 -D /tmp/ahoj-qa-input
+          gh run download 44397346692 -n ahoj-fluent-v2-44397346692 -D /tmp/ahoj-qa-input
           test -s /tmp/ahoj-qa-input/receipt.json
           test -s /tmp/ahoj-qa-input/QA_ONLY_FULL_SENTENCE_natural.wav
+          test -s /tmp/ahoj-qa-input/QA_ONLY_FULL_SENTENCE_learning_slow.wav
       - name: Offline ASR installation (no paid Speech-to-Text service)
         run: python -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
       - name: Fully automatic Czech speech QA
