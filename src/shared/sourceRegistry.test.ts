@@ -174,6 +174,9 @@ test('SPEECH_STYLE_PROFILES and isJobDriveEligible enforce QA PASS-only Drive sy
         qa_key: 'CZ-A0-M01-L01-PH001__natural',
         source_id: 'CZ-A0-M01-L01-PH001',
         speech_style: 'natural',
+        style_version: 'v1',
+        receipt_key: 'CZ-A0-M01-L01-PH001__natural',
+        audio_sha256: 'sha1',
         listening_qa: 'PASS',
         publication_gate: 'BLOCKED_FOR_RELEASE',
         issue_category: '',
@@ -222,3 +225,40 @@ test('SPEECH_STYLE_PROFILES and isJobDriveEligible enforce QA PASS-only Drive sy
   );
 });
 
+
+
+test('Drive export gate rejects stale QA approvals after WAV regeneration', () => {
+  const key = getVariantKey('CZ-A0-M01-L01-PH001', 'natural');
+  const goodJob = {
+    receipt_key: key,
+    source_id: 'CZ-A0-M01-L01-PH001',
+    speech_style: 'natural' as const,
+    style_version: 'v1',
+    is_mock: false,
+    status: 'REAL_SUCCESS' as const,
+    storage_backend: 'gcs-private-bucket' as const,
+    audio_sha256: 'hash-v1',
+    stale: false,
+  } as AudioJobReceipt;
+  const goodQA: QaRecord = {
+    qa_key: key,
+    source_id: goodJob.source_id,
+    speech_style: 'natural',
+    style_version: 'v1',
+    receipt_key: key,
+    audio_sha256: 'hash-v1',
+    listening_qa: 'PASS',
+    publication_gate: 'BLOCKED_FOR_RELEASE',
+    issue_category: '',
+    notes: '',
+    reviewer: 'owner',
+    updated_at: '2026-11-18T00:00:00Z',
+  };
+  assert.equal(isJobDriveEligible(goodJob, { [key]: goodQA }), true);
+  assert.equal(isJobDriveEligible({ ...goodJob, audio_sha256: 'regenerated-wav' }, { [key]: goodQA }), false);
+  assert.equal(isJobDriveEligible({ ...goodJob, stale: true }, { [key]: goodQA }), false);
+  assert.equal(isJobDriveEligible({ ...goodJob, storage_backend: 'local-preview-ephemeral' }, { [key]: goodQA }), false);
+  assert.equal(isJobDriveEligible(goodJob, { [key]: { ...goodQA, style_version: 'v2' } }), false);
+  assert.equal(isJobDriveEligible(goodJob, { [key]: { ...goodQA, audio_sha256: undefined } }), false);
+  assert.equal(isJobDriveEligible(goodJob, { [key]: { ...goodQA, receipt_key: 'wrong-receipt' } }), false);
+});
