@@ -58,6 +58,11 @@ def print_plan():
 
 
 def access_token():
+    # GitHub Actions supplies this token through a temporary masked output.
+    # Never print it, write it to files, or place it in the GitHub artifact.
+    from_env = os.environ.get("AHOJ_GCP_ACCESS_TOKEN", "").strip()
+    if from_env:
+        return from_env
     result = subprocess.run(
         ["gcloud", "auth", "print-access-token"],
         check=True, capture_output=True, text=True,
@@ -163,14 +168,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--generate", action="store_true",
                         help="Perform TWO real, potentially billable Vertex TTS calls")
+    parser.add_argument("--artifact-only", action="store_true",
+                        help="Save local WAV+receipt only; no Cloud Storage operations")
     args = parser.parse_args()
     print_plan()
     if not args.generate:
         print("DRY_RUN_OK — no TTS, no GCS writes.")
         return
+    if os.environ.get("GITHUB_ACTIONS") == "true" and not args.artifact_only:
+        raise SystemExit("GitHub Actions TTS must use --artifact-only (GCS prohibited)")
     run_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     prefix = "qa-only/full-sentence/" + run_id
-    out_dir = pathlib.Path.home() / "ahoj-full-sentence-qa" / run_id
+    out_dir = pathlib.Path(os.environ.get("AHOJ_VOICE_QA_OUTPUT_DIR",
+                                         str(pathlib.Path.home() / "ahoj-full-sentence-qa" / run_id)))
     out_dir.mkdir(parents=True, exist_ok=False)
     token = access_token()
     receipt = {
@@ -201,11 +211,15 @@ def main():
         local_file.write_bytes(wav_bytes)
         cloud_path = prefix + "/" + filename
         metadata["local_file"] = str(local_file)
-        metadata["gcs_path"] = "gs://" + BUCKET + "/" + cloud_path
+        metadata["gcs_path"] = None if args.artifact_only else "gs://" + BUCKET + "/" + cloud_path
         receipt["variants"][name] = metadata
         (out_dir / "receipt.json").write_text(
             json.dumps(receipt, indent=2, ensure_ascii=False), encoding="utf-8"
         )
+        if args.artifact_only:
+            print(name, "saved as private GitHub Actions artifact:", local_file)
+            print("duration_ms:", metadata["duration_ms"], "sha256:", metadata["audio_sha256"])
+            continue
         try:
             upload_private(BUCKET, cloud_path, wav_bytes, token, "audio/wav")
         except Exception as exc:
@@ -217,6 +231,10 @@ def main():
     receipt_file = out_dir / "receipt.json"
     receipt_bytes = json.dumps(receipt, indent=2, ensure_ascii=False).encode("utf-8")
     receipt_file.write_bytes(receipt_bytes)
+    if args.artifact_only:
+        print("FULL_SENTENCE_QA_READY — two WAVs saved for private GitHub artifact; QA REVIEW.")
+        print("LOCAL:", out_dir)
+        return
     try:
         upload_private(BUCKET, prefix + "/receipt.json", receipt_bytes, token, "application/json")
     except Exception as exc:
