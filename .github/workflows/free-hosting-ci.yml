@@ -47,6 +47,9 @@ jobs:
         run: |
           python3 -m py_compile scripts/voice_quality_full_sentence.py
           python3 -m py_compile scripts/auto_audio_qa.py
+          python3 -m py_compile scripts/produce_curriculum_batch.py
+          python3 scripts/produce_curriculum_batch.py --manifest production/manifest/2026-11-19-first-4-verified.json | tee /tmp/ahoj-lesson-dry-run.txt
+          grep -q 'DRY_RUN_OK' /tmp/ahoj-lesson-dry-run.txt
           python3 scripts/voice_quality_full_sentence.py > /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'DRY_RUN_OK' /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'Můžete mi prosím říct' /tmp/ahoj-full-sentence-dry-run.txt
