@@ -1,0 +1,11 @@
+{
+  "request": "One bounded correction to the PH003 natural WAV; original QUARANTINED because ASR heard 'Jak se menujete' rather than source-locked 'Jak se jmenujete?'",
+  "manifest": "production/manifest/2026-11-19-first-4-verified.json",
+  "source_id": "CZ-A0-M01-L01-PH003",
+  "style": "natural",
+  "max_billable_tts_requests": 1,
+  "source_changed": false,
+  "no_manual_qa": true,
+  "release_allowed": false,
+  "original_batch_run_id": 44401779909
+}
