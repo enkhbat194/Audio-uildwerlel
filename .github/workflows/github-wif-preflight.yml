@@ -10,7 +10,14 @@ on:
       - .github/workflows/github-wif-preflight.yml
       - scripts/bootstrap-github-wif.sh
       - docs/GITHUB_WIF_HANDOFF.md
+      - qa/requests/VOICE_QA_RUN_20261119.json
   workflow_dispatch:
+    inputs:
+      generate_two_wavs:
+        description: 'Run exactly two billed Czech sentence TTS requests?'
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -64,3 +71,49 @@ jobs:
           set -euo pipefail
           test -n "$FEDERATED_TOKEN"
           echo "WIF_TOKEN_OK: short-lived token minted. No Vertex AI or Cloud Storage requests were made."
+
+  voice-quality-two-wavs:
+    name: Generate two Czech QA WAVs — ONLY explicit run, no GCS
+    needs: readiness
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.generate_two_wavs == true) ||
+        (github.event_name == 'push' && github.event.head_commit.message == 'qa(run): generate two full-sentence WAV once')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out exact reviewed branch
+        uses: actions/checkout@v4
+      - name: Authenticate as dedicated limited Vertex-only voice QA account
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-voiceqa@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 600s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Generate EXACTLY two sentence WAVs without retries (billable)
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-voice-qa
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/voice_quality_full_sentence.py
+          python3 scripts/voice_quality_full_sentence.py --generate --artifact-only
+      - name: Upload audio and QA receipt, even if one generation failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-full-sentence-voice-qa-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-voice-qa/
+          retention-days: 7
+          if-no-files-found: warn
