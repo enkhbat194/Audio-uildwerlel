@@ -38,6 +38,14 @@ jobs:
         run: bun run build
       - name: Confirm build artifact
         run: test -f dist/index.html
+      - name: Build isolated Render preview and inspect output
+        run: |
+          VITE_FREE_HOSTING_POC=true bun run build
+          test -f dist/index.html
+          grep -Rl 'Туршилтын сервер ажиллаж байна' dist/assets/*.js > /tmp/poc-bundle-match.txt
+          test -s /tmp/poc-bundle-match.txt
+      - name: Restore production client build for API smoke tests
+        run: bun run build
       - name: Smoke test production server and owner protection
         env:
           NODE_ENV: production
