@@ -1,0 +1,65 @@
+name: Audio Factory - fluent voice pause polish QA
+# Uses already-generated sample WAVs; zero TTS, zero Google Cloud permissions.
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - scripts/polish_internal_pauses.py
+      - .github/workflows/audio-polish-v2.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  postprocess-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download existing Fluent v2 WAVs, no TTS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p /tmp/original-wavs
+          gh run download 44397346692 -n ahoj-fluent-v2-44397346692 -D /tmp/original-wavs
+          test -s /tmp/original-wavs/QA_ONLY_FULL_SENTENCE_natural.wav
+          test -s /tmp/original-wavs/QA_ONLY_FULL_SENTENCE_learning_slow.wav
+          test -s /tmp/original-wavs/receipt.json
+      - name: Trim only excessive internal silence and update immutable hashes
+        run: |
+          python3 -m py_compile scripts/polish_internal_pauses.py scripts/auto_audio_qa.py
+          python3 scripts/polish_internal_pauses.py \
+            --input-dir /tmp/original-wavs --output-dir /tmp/verified-wavs
+      - name: Install offline Czech ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Auto QA final output, reject abnormal pauses and text mismatches
+        run: |
+          python3 scripts/auto_audio_qa.py \
+            --input-dir /tmp/verified-wavs \
+            --output /tmp/verified-wavs/auto_qa_report.json --model small
+          python3 - <<'PY'
+          import json
+          p='/tmp/verified-wavs/auto_qa_report.json'
+          d=json.load(open(p))
+          for name, record in d['variants'].items():
+              print(name, record['decision'], 'internal pause (s)',
+                    record['technical']['max_internal_pause_seconds'],
+                    'transcript:', record['asr_transcript'])
+          if any(r['decision'] != 'AUTO_PASS' for r in d['variants'].values()):
+              raise SystemExit('At least one audio variant failed automatic QA: artifact is quarantined')
+          print('FLUENT_V2_AUTO_QA_ALL_PASS')
+          PY
+      - name: Keep WAVs and QA manifests available for audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-fluent-v2-polished-${{ github.run_id }}
+          path: /tmp/verified-wavs/
+          retention-days: 14
+          if-no-files-found: warn
