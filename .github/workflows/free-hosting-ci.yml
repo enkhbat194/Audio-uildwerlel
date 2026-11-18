@@ -60,6 +60,20 @@ jobs:
             | tee /tmp/ahoj-dialogue-dry-run.txt
           grep -q 'TTS_calls 6' /tmp/ahoj-dialogue-dry-run.txt
           grep -q 'CZ-A0-M01-L01-B01-T06' /tmp/ahoj-dialogue-dry-run.txt
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json \
+            --only-source CZ-A0-M01-L01-B01-T02 --only-style natural --repair-bat \
+            | tee /tmp/ahoj-bat-dry-run.txt
+          grep -q 'TTS_calls 1' /tmp/ahoj-bat-dry-run.txt
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"scripts")
+          from produce_curriculum_batch import is_verified_phonetic_homophone
+          row={"source_id":"CZ-A0-M01-L01-B01-T06","cs_exact":"Mě také."}
+          assert is_verified_phonetic_homophone(row,"Mně také?")
+          assert not is_verified_phonetic_homophone(row,"Mně takhle.")
+          assert not is_verified_phonetic_homophone({"source_id":"other","cs_exact":"Mě také."},"Mně také.")
+          PY
           python3 scripts/voice_quality_full_sentence.py > /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'DRY_RUN_OK' /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'Můžete mi prosím říct' /tmp/ahoj-full-sentence-dry-run.txt
