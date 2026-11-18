@@ -15,7 +15,7 @@ import {
   listDriveImportFiles,
   type DriveFileItem,
 } from '../lib/driveClient';
-import { parseAndValidateImport } from '../shared/sourceRegistry';
+import { getJobsForSource, getVariantKey, parseAndValidateImport } from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
   ExecutionMode,
@@ -292,15 +292,20 @@ export function SourceRegistryView({
               <th className="py-3.5 px-4">Чех өгүүлбэр (Зөвхөн унших)</th>
               <th className="py-3.5 px-4">Эх туг ба зөвшөөрөл</th>
               <th className="py-3.5 px-4">
-                Normal ({mode === 'mock' ? 'MOCK' : 'Бодит'}) / Slow
+                Natural / Learning Slow ({mode === 'mock' ? 'MOCK' : 'Бодит'})
               </th>
               <th className="py-3.5 px-4 text-right">Үйлдэл</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
             {filtered.map((row) => {
-              const job = activeJobs[row.source_id];
-              const realExists = realJobs[row.source_id]?.status === 'REAL_SUCCESS';
+              const naturalJob = activeJobs[getVariantKey(row.source_id, 'natural')];
+              const slowJob = activeJobs[getVariantKey(row.source_id, 'learning_slow')];
+              const legacyJob = activeJobs[row.source_id];
+              const primaryJob = naturalJob ?? slowJob ?? legacyJob;
+              const realExists = getJobsForSource(realJobs, row.source_id).some(
+                (j) => j.status === 'REAL_SUCCESS'
+              );
               return (
                 <tr
                   key={row.source_id}
@@ -330,15 +335,15 @@ export function SourceRegistryView({
                   </td>
                   <td className="py-4 px-4 align-top space-y-1">
                     <div className="flex items-center gap-2">
-                      <JobStatusLabel status={job?.status ?? 'PENDING'} />
+                      <JobStatusLabel status={primaryJob?.status ?? 'PENDING'} />
                       {mode === 'mock' && realExists && (
                         <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
                           (+Бодит бэлэн)
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      Slow: Хэрэгжүүлээгүй
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      Natural: {naturalJob ? `${naturalJob.duration_ms ?? '—'} ms` : '—'} · Slow: {slowJob ? `${slowJob.duration_ms ?? '—'} ms` : '—'}
                     </div>
                   </td>
                   <td className="py-4 px-4 align-top text-right">
@@ -369,7 +374,9 @@ export function SourceRegistryView({
       {/* Mobile / Tablet Cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map((row) => {
-          const job = activeJobs[row.source_id];
+          const naturalJob = activeJobs[getVariantKey(row.source_id, 'natural')];
+          const slowJob = activeJobs[getVariantKey(row.source_id, 'learning_slow')];
+          const job = naturalJob ?? slowJob ?? activeJobs[row.source_id];
           return (
             <div
               key={row.source_id}

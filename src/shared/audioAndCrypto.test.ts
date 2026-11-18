@@ -46,41 +46,93 @@ test('parseWavHeader rejects arbitrary non-WAV bytes instead of blindly renaming
   assert.ok(parsed.error);
 });
 
-test('generateMockSpeechWav produces playable valid WAV with non-zero duration', () => {
-  const wav = generateMockSpeechWav('Jak se jmenujete?', 'CZ-A0-M01-L01-PH003');
-  const parsed = parseWavHeader(wav);
-  assert.equal(parsed.valid, true);
-  assert.equal(parsed.sampleRate, 24000);
-  assert.equal(parsed.channels, 1);
-  assert.ok(parsed.durationMs >= 950);
+test('generateMockSpeechWav produces playable valid WAVs with longer duration for learning_slow', () => {
+  const naturalWav = generateMockSpeechWav('Jak se jmenujete?', 'CZ-A0-M01-L01-PH003', 'natural');
+  const slowWav = generateMockSpeechWav('Jak se jmenujete?', 'CZ-A0-M01-L01-PH003', 'learning_slow');
+  const parsedNat = parseWavHeader(naturalWav);
+  const parsedSlow = parseWavHeader(slowWav);
+  assert.equal(parsedNat.valid, true);
+  assert.equal(parsedNat.sampleRate, 24000);
+  assert.equal(parsedNat.channels, 1);
+  assert.ok(parsedNat.durationMs >= 950);
+  assert.equal(parsedSlow.valid, true);
+  assert.ok(parsedSlow.durationMs > parsedNat.durationMs);
 });
 
-test('computeGenerationFingerprint invalidates when Czech text changes', () => {
-  const fp1 = computeGenerationFingerprint({
+test('computeGenerationFingerprint and filename include speech_style and style_version and invalidate on Czech text or style changes', () => {
+  const fpNatural = computeGenerationFingerprint({
     source_id: 'CZ-A0-M01-L01-PH001',
     dataset_version: 'v0.9.20',
     exact_text_sha256: sha256Utf8('Dobrý den.'),
     model: 'gemini-3.8-flash-tts',
     voice: 'Achernar',
     speed_profile: 'normal',
+    speech_style: 'natural',
+    style_version: 'v1',
   });
-  const fp2 = computeGenerationFingerprint({
+  const fpTextChanged = computeGenerationFingerprint({
     source_id: 'CZ-A0-M01-L01-PH001',
     dataset_version: 'v0.9.20',
     exact_text_sha256: sha256Utf8('Dobrý večer.'),
     model: 'gemini-3.8-flash-tts',
     voice: 'Achernar',
     speed_profile: 'normal',
+    speech_style: 'natural',
+    style_version: 'v1',
   });
-  assert.notEqual(fp1, fp2);
-
-  const filename = buildDeterministicFilename({
+  const fpSlow = computeGenerationFingerprint({
+    source_id: 'CZ-A0-M01-L01-PH001',
+    dataset_version: 'v0.9.20',
+    exact_text_sha256: sha256Utf8('Dobrý den.'),
+    model: 'gemini-3.8-flash-tts',
+    voice: 'Achernar',
+    speed_profile: 'slow',
+    speech_style: 'learning_slow',
+    style_version: 'v1',
+  });
+  const fpVersionBump = computeGenerationFingerprint({
     source_id: 'CZ-A0-M01-L01-PH001',
     dataset_version: 'v0.9.20',
     exact_text_sha256: sha256Utf8('Dobrý den.'),
     model: 'gemini-3.8-flash-tts',
     voice: 'Achernar',
     speed_profile: 'normal',
+    speech_style: 'natural',
+    style_version: 'v2',
   });
-  assert.match(filename, /^CZ-A0-M01-L01-PH001__gemini-3\.8-flash-tts__Achernar__normal__[0-9a-f]{12}\.wav$/);
+
+  assert.notEqual(fpNatural, fpTextChanged);
+  assert.notEqual(fpNatural, fpSlow);
+  assert.notEqual(fpNatural, fpVersionBump);
+
+  const naturalFilename = buildDeterministicFilename({
+    source_id: 'CZ-A0-M01-L01-PH001',
+    dataset_version: 'v0.9.20',
+    exact_text_sha256: sha256Utf8('Dobrý den.'),
+    model: 'gemini-3.8-flash-tts',
+    voice: 'Achernar',
+    speed_profile: 'normal',
+    speech_style: 'natural',
+    style_version: 'v1',
+  });
+  const slowFilename = buildDeterministicFilename({
+    source_id: 'CZ-A0-M01-L01-PH001',
+    dataset_version: 'v0.9.20',
+    exact_text_sha256: sha256Utf8('Dobrý den.'),
+    model: 'gemini-3.8-flash-tts',
+    voice: 'Achernar',
+    speed_profile: 'slow',
+    speech_style: 'learning_slow',
+    style_version: 'v1',
+  });
+  assert.match(
+    naturalFilename,
+    /^CZ-A0-M01-L01-PH001__gemini-3\.8-flash-tts__Achernar__natural__v1__[0-9a-f]{12}\.wav$/
+  );
+  assert.match(
+    slowFilename,
+    /^CZ-A0-M01-L01-PH001__gemini-3\.8-flash-tts__Achernar__learning_slow__v1__[0-9a-f]{12}\.wav$/
+  );
+  assert.notEqual(naturalFilename, slowFilename);
 });
+

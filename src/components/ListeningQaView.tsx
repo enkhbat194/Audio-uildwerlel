@@ -9,14 +9,22 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { authedFetch, downloadAuthedFile } from '../lib/apiClient';
+import {
+  SPEECH_STYLE_PROFILES,
+  getJobsForSource,
+  getVariantKey,
+} from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
   ExecutionMode,
   QaRecord,
   QaStatus,
   SourceRow,
+  SpeechStyle,
 } from '../shared/types';
 import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
+
+export type QaVariantSelection = SpeechStyle | 'legacy';
 
 interface ListeningQaViewProps {
   sources: SourceRow[];
@@ -26,9 +34,17 @@ interface ListeningQaViewProps {
   qa: Record<string, QaRecord>;
   selectedSourceId: string;
   onSelectSourceId: (id: string) => void;
+  selectedStyle: SpeechStyle;
+  onSelectStyle: (style: SpeechStyle) => void;
   onSaveQa: (
     sourceId: string,
-    payload: { listening_qa: QaStatus; issue_category: string; notes: string }
+    payload: {
+      listening_qa: QaStatus;
+      issue_category: string;
+      notes: string;
+      speechStyle?: SpeechStyle;
+      qaKey?: string;
+    }
   ) => Promise<void>;
 }
 
@@ -40,18 +56,32 @@ export function ListeningQaView({
   qa,
   selectedSourceId,
   onSelectSourceId,
+  selectedStyle,
+  onSelectStyle,
   onSaveQa,
 }: ListeningQaViewProps) {
   const [scope, setScope] = useState<'real' | 'mock'>(mode === 'mock' ? 'mock' : 'real');
+  const [variantTab, setVariantTab] = useState<QaVariantSelection>(selectedStyle);
 
   useEffect(() => {
     setScope(mode === 'mock' ? 'mock' : 'real');
   }, [mode]);
 
+  useEffect(() => {
+    setVariantTab(selectedStyle);
+  }, [selectedStyle]);
+
   const activeJobMap = scope === 'mock' ? mockJobs : realJobs;
   const activeSource = sources.find((s) => s.source_id === selectedSourceId) ?? sources[0];
-  const activeJob = activeSource ? activeJobMap[activeSource.source_id] : undefined;
-  const activeQa = activeSource ? qa[activeSource.source_id] : undefined;
+
+  const legacyJob = activeSource ? activeJobMap[activeSource.source_id] : undefined;
+  const activeQaKey = activeSource
+    ? variantTab === 'legacy'
+      ? activeSource.source_id
+      : getVariantKey(activeSource.source_id, variantTab)
+    : '';
+  const activeJob = activeSource ? activeJobMap[activeQaKey] : undefined;
+  const activeQa = activeQaKey ? qa[activeQaKey] : undefined;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
@@ -72,7 +102,7 @@ export function ListeningQaView({
     setNotes(activeQa?.notes ?? '');
     setSaveFeedback(null);
     setIsPlaying(false);
-  }, [activeSource?.source_id, activeQa?.updated_at]);
+  }, [activeSource?.source_id, activeQaKey, activeQa?.updated_at]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -144,8 +174,13 @@ export function ListeningQaView({
         listening_qa: qaStatus,
         issue_category: issueCategory,
         notes,
+        ...(variantTab === 'legacy'
+          ? { qaKey: activeSource.source_id }
+          : { speechStyle: variantTab, qaKey: getVariantKey(activeSource.source_id, variantTab) }),
       });
-      setSaveFeedback('QA үнэлгээ хадгалагдлаа.');
+      setSaveFeedback(
+        `${variantTab === 'legacy' ? 'Legacy' : SPEECH_STYLE_PROFILES[variantTab].short_label} хувилбарын QA хадгалагдлаа.`
+      );
     } catch {
       setSaveFeedback('QA хадгалахад алдаа гарлаа.');
     } finally {
@@ -166,10 +201,10 @@ export function ListeningQaView({
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Сонсож шалгах (Listening QA)
+            Сонсож шалгах (WAV бүрт тусдаа QA)
           </h1>
           <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-            Бодит болон MOCK аудиог тусад нь ялгаж сонсоод, эх чех тексттэй тулгаж хүний QA дүнг бүртгэнэ.
+            Natural, Learning Slow болон анхны WAV файл бүрд тусдаа QA үнэлгээ хадгална. REVIEW эсвэл FAIL болсон файл Google Drive руу синк хийгдэхгүй.
           </p>
         </div>
 
@@ -204,14 +239,14 @@ export function ListeningQaView({
         </div>
       </div>
 
-      {/* Mandatory Technical Validity vs Linguistic Accuracy Disclaimer */}
+      {/* Mandatory Technical Validity vs Linguistic Accuracy & Drive Gate Disclaimer */}
       <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <p className="text-xs md:text-sm text-amber-950 dark:text-amber-200">
           <strong>Анхаар:</strong> WAV дохио хүчинтэй (PCM16, 24kHz) гэдэг нь чех уугуул дуудлага зөв гэсэн үг биш.
           {scope === 'mock'
             ? ' Одоо зөвхөн тусгаарлагдсан MOCK (синтетик) файл харагдаж байна — үүнийг бодит дуудлага гэж тооцохгүй.'
-            : ' Хүн заавал сонсож чех дуудлагыг баталгаажуулна.'}
+            : ' Зөвхөн PASS үнэлгээ авсан WAV файлыг л Google Drive руу апп аудио гэж синк хийхийг зөвшөөрнө.'}
         </p>
       </div>
 
@@ -220,8 +255,14 @@ export function ListeningQaView({
         <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden">
           {sources.map((row) => {
             const selected = row.source_id === activeSource.source_id;
-            const rowJob = activeJobMap[row.source_id];
-            const rowQa = qa[row.source_id];
+            const naturalQa = qa[getVariantKey(row.source_id, 'natural')];
+            const slowQa = qa[getVariantKey(row.source_id, 'learning_slow')];
+            const rowJobs = getJobsForSource(activeJobMap, row.source_id);
+            const displayQa =
+              variantTab === 'legacy'
+                ? qa[row.source_id]
+                : qa[getVariantKey(row.source_id, variantTab)];
+
             return (
               <button
                 key={row.source_id}
@@ -235,36 +276,97 @@ export function ListeningQaView({
               >
                 <div className="flex items-center justify-between gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{row.source_id}</span>
-                  <QaStatusLabel status={rowQa?.listening_qa ?? 'QA_PENDING'} />
+                  <QaStatusLabel status={displayQa?.listening_qa ?? 'QA_PENDING'} />
                 </div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
                   {row.cs_exact}
                 </p>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  <JobStatusLabel status={rowJob?.status ?? 'PENDING'} />
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  <JobStatusLabel status={rowJobs[0]?.status ?? 'PENDING'} />
+                  {naturalQa && <span>N:{naturalQa.listening_qa}</span>}
+                  {slowQa && <span>S:{slowQa.listening_qa}</span>}
                 </div>
               </button>
             );
           })}
         </div>
 
-        {/* Right: Player, Signal Metadata, and QA Form */}
+        {/* Right: Variant Tabs, Player, Signal Metadata, and Per-WAV QA Form */}
         <div className="lg:col-span-8 space-y-6">
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
+            {/* Variant Selector Tabs */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                <span>{activeSource.source_id}</span>
-                <span> · </span>
-                <span>{activeSource.lesson_id}</span>
-                <span> · </span>
-                <span>{activeSource.source_gate}</span>
+              <div
+                role="tablist"
+                aria-label="Аудио хувилбар сонгох"
+                className="inline-flex flex-wrap p-1 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1"
+              >
+                {(['natural', 'learning_slow'] as SpeechStyle[]).map((styleKey) => {
+                  const def = SPEECH_STYLE_PROFILES[styleKey];
+                  const vKey = getVariantKey(activeSource.source_id, styleKey);
+                  const vQa = qa[vKey]?.listening_qa;
+                  const isActive = variantTab === styleKey;
+                  return (
+                    <button
+                      key={styleKey}
+                      role="tab"
+                      aria-selected={isActive}
+                      type="button"
+                      onClick={() => {
+                        setVariantTab(styleKey);
+                        onSelectStyle(styleKey);
+                      }}
+                      className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-2 transition-colors ${
+                        isActive
+                          ? 'bg-white dark:bg-slate-950 text-sky-900 dark:text-sky-200 shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{def.short_label} ({def.style_version})</span>
+                      {vQa && vQa !== 'QA_PENDING' && (
+                        <span className="font-mono text-[10px] opacity-80">[{vQa}]</span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {legacyJob && (
+                  <button
+                    role="tab"
+                    aria-selected={variantTab === 'legacy'}
+                    type="button"
+                    onClick={() => setVariantTab('legacy')}
+                    className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                      variantTab === 'legacy'
+                        ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Анхны PH001 (Legacy)
+                  </button>
+                )}
               </div>
+
               <JobStatusLabel status={activeJob?.status ?? 'PENDING'} />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
+              <span>
+                {activeQaKey} · {activeSource.lesson_id} · {activeSource.source_gate}
+              </span>
+              {activeJob?.fingerprint && (
+                <span>FP: {activeJob.fingerprint.slice(0, 12)}…</span>
+              )}
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Тулгах чех өгүүлбэр (Зөвхөн унших)</p>
               <p className="text-2xl font-bold text-slate-900 dark:text-slate-50">{activeSource.cs_exact}</p>
+              {variantTab !== 'legacy' && (
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-2">
+                  speechMetadata.style: &quot;{SPEECH_STYLE_PROFILES[variantTab].style_prompt}&quot;
+                </p>
+              )}
             </div>
 
             {playable && audioBlobUrl ? (
@@ -339,12 +441,12 @@ export function ListeningQaView({
                 <Volume2 className="w-6 h-6 text-slate-400 mx-auto" aria-hidden="true" />
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {audioLoadError ??
-                    (scope === 'real'
-                      ? 'Энэ өгүүлбэрт бодит WAV файл үүсээгүй байна.'
-                      : 'Энэ өгүүлбэрт MOCK WAV файл үүсээгүй байна.')}
+                    `Энэ өгүүлбэрийн ${
+                      variantTab === 'legacy' ? 'Legacy' : SPEECH_STYLE_PROFILES[variantTab].short_label
+                    } (${scope}) WAV файл үүсээгүй байна.`}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Үйлдвэрлэл хэсгээс аудио үүсгэсний дараа энд тоглуулж шалгана уу.
+                  Үйлдвэрлэл хэсгээс энэ хэв маягийн аудиог үүсгэсний дараа энд тоглуулж шалгана уу.
                 </p>
               </div>
             )}
@@ -370,16 +472,17 @@ export function ListeningQaView({
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500 dark:text-slate-400">Peak / RMS</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Хэв маяг / Хувилбар</dt>
                 <dd className="font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
-                  {activeJob?.peak_dbfs !== null && activeJob?.peak_dbfs !== undefined
-                    ? `${activeJob.peak_dbfs} / ${activeJob.rms_dbfs} dBFS`
-                    : '—'}
+                  {activeJob?.speech_style
+                    ? `${activeJob.speech_style} (${activeJob.style_version ?? 'v1'})`
+                    : 'legacy'}
                 </dd>
               </div>
               <div className="col-span-2 sm:col-span-4">
-                <dt className="text-slate-500 dark:text-slate-400">WAV SHA256</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Файл / WAV SHA256</dt>
                 <dd className="font-mono text-slate-900 dark:text-slate-100 break-all mt-0.5">
+                  {activeJob?.filename ? `${activeJob.filename} · ` : ''}
                   {activeJob?.audio_sha256 ?? '—'}
                 </dd>
               </div>
@@ -391,9 +494,17 @@ export function ListeningQaView({
             onSubmit={handleSubmitQa}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4"
           >
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
-              Хүний QA үнэлгээ бүртгэх
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                Хүний QA үнэлгээ бүртгэх —{' '}
+                <span className="font-mono text-sky-700 dark:text-sky-400">
+                  {variantTab === 'legacy' ? 'Legacy' : SPEECH_STYLE_PROFILES[variantTab].short_label}
+                </span>
+              </h2>
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                QA Key: {activeQaKey}
+              </span>
+            </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {(['QA_PENDING', 'PASS', 'REVIEW', 'FAIL'] as QaStatus[]).map((opt) => (
@@ -411,6 +522,12 @@ export function ListeningQaView({
                 </button>
               ))}
             </div>
+
+            {(qaStatus === 'REVIEW' || qaStatus === 'FAIL') && (
+              <p className="text-xs text-red-700 dark:text-red-400 font-medium">
+                {qaStatus} төлөвтэй файл нь Google Drive-д аппад ашиглах аудио хэлбэрээр синк хийгдэхгүй (автоматаар хасагдана).
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -470,7 +587,7 @@ export function ListeningQaView({
                 disabled={isSaving}
                 className="min-h-[44px] px-5 py-2.5 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white text-sm font-semibold cursor-pointer"
               >
-                {isSaving ? 'Хадгалж байна...' : 'QA хадгалах'}
+                {isSaving ? 'Хадгалж байна...' : 'Энэ WAV-ийн QA хадгалах'}
               </button>
             </div>
           </form>

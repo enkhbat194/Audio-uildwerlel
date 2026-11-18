@@ -2,6 +2,8 @@ export type ExecutionMode = 'mock' | 'vertex';
 
 export type SpeedProfile = 'normal' | 'slow';
 
+export type SpeechStyle = 'natural' | 'learning_slow';
+
 export type JobStatus =
   | 'NOT_CONNECTED'
   | 'PENDING'
@@ -36,6 +38,7 @@ export interface SourceRow {
 }
 
 export interface AudioJobReceipt {
+  receipt_key?: string;
   source_id: string;
   dataset_version: string;
   cs_exact_sha256: string;
@@ -45,6 +48,9 @@ export interface AudioJobReceipt {
   model: string;
   voice: string;
   speed_profile: SpeedProfile;
+  speech_style?: SpeechStyle;
+  style_version?: string;
+  style_prompt?: string;
   status: JobStatus;
   is_mock: boolean;
   http_status: number | null;
@@ -61,6 +67,7 @@ export interface AudioJobReceipt {
   rms_dbfs: number | null;
   format: 'wav' | null;
   storage_ref: string | null;
+  gcs_object_path?: string | null;
   storage_backend: 'local-preview-ephemeral' | 'gcs-private-bucket' | null;
   stale: boolean;
   created_at: string;
@@ -68,7 +75,12 @@ export interface AudioJobReceipt {
 }
 
 export interface QaRecord {
+  qa_key?: string;
   source_id: string;
+  speech_style?: SpeechStyle;
+  style_version?: string;
+  receipt_key?: string;
+  audio_sha256?: string | null;
   listening_qa: QaStatus;
   publication_gate: PublicationGate;
   issue_category: string;

@@ -523,3 +523,328 @@ test('prevents billable Vertex TTS generation BEFORE calling Vertex AI when dura
     await new Promise<void>((resolve) => customServer.close(() => resolve()));
   }
 });
+
+test('callVertexTtsWithRetry sends official Vertex contents[].parts[].speechMetadata.style with Achernar and gemini-3.8-flash-tts', async () => {
+  const { buildVertexTtsRequestPayload, callVertexTtsWithRetry } = await import('./vertexTts');
+  const { SPEECH_STYLE_PROFILES, VERTEX_ENDPOINT } = await import('../shared/sourceRegistry');
+  const { generateMockSpeechWav } = await import('../shared/audioAndCrypto');
+
+  const sampleWav = generateMockSpeechWav('Dobrý den.', 'CZ-A0-M01-L01-PH001', 'natural');
+  const built = buildVertexTtsRequestPayload(
+    'Dobrý den.',
+    'Achernar',
+    SPEECH_STYLE_PROFILES.learning_slow.style_prompt
+  );
+  assert.equal(built.contents[0].parts[0].text, 'Dobrý den.');
+  assert.equal(
+    built.contents[0].parts[0].speechMetadata.style,
+    SPEECH_STYLE_PROFILES.learning_slow.style_prompt
+  );
+  assert.equal(built.generationConfig.speechConfig.voiceConfig.voice, 'Achernar');
+
+  const originalFetch = globalThis.fetch;
+  const seenPayloads: Array<{ url: string; body: any }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+    seenPayloads.push({ url, body });
+    return new Response(
+      JSON.stringify({
+        responseId: 'resp-vertex-style-1',
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/wav',
+                    data: Buffer.from(sampleWav).toString('base64'),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  try {
+    const result = await callVertexTtsWithRetry(
+      'Dobrý den.',
+      'Achernar',
+      SPEECH_STYLE_PROFILES.natural.style_prompt,
+      1,
+      'ya29.mock-adc-token'
+    );
+    assert.equal(result.ok, true);
+    assert.equal(seenPayloads.length, 1);
+    assert.equal(seenPayloads[0].url, VERTEX_ENDPOINT);
+    assert.equal(seenPayloads[0].body.contents[0].parts[0].text, 'Dobrý den.');
+    assert.equal(
+      seenPayloads[0].body.contents[0].parts[0].speechMetadata.style,
+      SPEECH_STYLE_PROFILES.natural.style_prompt
+    );
+    assert.equal(seenPayloads[0].body.generationConfig.speechConfig.voiceConfig.voice, 'Achernar');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('PH001 Natural and Learning Slow preserve prior PH001 WAV without overwrite, track separate QA, and block REVIEW/FAIL from Drive sync', async () => {
+  const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ahoj-style-variant-test-'));
+  const prevCwd = process.cwd();
+  process.chdir(isolatedDir);
+
+  try {
+    const { createApiRouter } = await import('./appFactory');
+    const { loadStore, saveStore, writeScopedAudioFile } = await import('./storage');
+    const { generateMockSpeechWav, sha256Utf8 } = await import('../shared/audioAndCrypto');
+    const { SEED_FIRST_FIVE_ROWS, SPEECH_STYLE_PROFILES } = await import('../shared/sourceRegistry');
+
+    // Seed a preserved prior legacy PH001 WAV & receipt on disk
+    const legacyWav = generateMockSpeechWav('Dobrý den.', 'CZ-A0-M01-L01-PH001', 'natural');
+    const legacyFilename = 'LEGACY_PH001_PRESERVED.wav';
+    const legacyStored = writeScopedAudioFile('real', legacyFilename, legacyWav);
+    const seedStore = loadStore();
+    seedStore.real_jobs['CZ-A0-M01-L01-PH001'] = {
+      source_id: 'CZ-A0-M01-L01-PH001',
+      dataset_version: 'v0.9.20',
+      cs_exact_sha256: SEED_FIRST_FIVE_ROWS[0].text_sha256,
+      fingerprint: 'legacy-fp-do-not-overwrite',
+      filename: legacyFilename,
+      provider: 'vertex-ai',
+      model: 'gemini-3.8-flash-tts',
+      voice: 'Achernar',
+      speed_profile: 'normal',
+      status: 'REAL_SUCCESS',
+      is_mock: false,
+      http_status: 200,
+      provider_request_id: 'legacy-req-1',
+      attempts: 1,
+      last_error: null,
+      audio_sha256: legacyStored.sha256,
+      sample_rate: 24000,
+      channels: 1,
+      bit_depth: 16,
+      duration_ms: 1050,
+      file_size: legacyStored.byteLength,
+      peak_dbfs: -6,
+      rms_dbfs: -12,
+      format: 'wav',
+      storage_ref: `gs://ahoj-private-audio/real/${legacyFilename}`,
+      storage_backend: 'gcs-private-bucket',
+      stale: false,
+      created_at: '2026-11-01T00:00:00Z',
+      updated_at: '2026-11-01T00:00:00Z',
+    };
+    saveStore(seedStore);
+
+    const ttsCalls: Array<{ text: string; voice: string; stylePrompt: string }> = [];
+    const uploadedPaths: string[] = [];
+
+    const variantApp = express();
+    variantApp.use(express.json());
+    variantApp.use(
+      '/api',
+      createApiRouter({
+        authDeps: {
+          projectId: TEST_PROJECT,
+          iapAudience: TEST_IAP_AUDIENCE,
+          requireIap: false,
+          ownerAllowlist: ['zazadada8899@gmail.com'],
+          fetchFirebaseCerts: async () => ({ [TEST_KID]: publicKeyPem }),
+        },
+        runtimeProbe: async (_force, firstRealVerified) => ({
+          project_id: TEST_PROJECT,
+          location: 'global',
+          model: 'gemini-3.8-flash-tts',
+          voice: 'Achernar',
+          endpoint: 'https://aiplatform.googleapis.com/test',
+          vertex_connected: true,
+          vertex_permission_verified: true,
+          adc_available: true,
+          runtime_identity: 'audio-factory-sa@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com',
+          storage_backend: 'gcs-private-bucket',
+          gcs_bucket: 'ahoj-private-audio',
+          gcs_permission_verified: true,
+          gcs_error: null,
+          firestore_connected: true,
+          firestore_database_id: 'ai-studio-608c02cc-851c-478c-a335-cdcc0cf9a9c3',
+          iap_enabled: true,
+          auth_mode: 'iap-and-firebase-jwt',
+          owner_allowlist: ['zazadada8899@gmail.com'],
+          allowlist_explicit: true,
+          estimated_cost_label: 'Тооцоолоогүй',
+          rate_limit_rpm: 20,
+          max_first_batch: 5,
+          first_real_wav_verified: Boolean(firstRealVerified),
+          adc_error: null,
+        }),
+        ttsCaller: async (
+          text,
+          voice = 'Achernar',
+          stylePrompt = SPEECH_STYLE_PROFILES.natural.style_prompt
+        ) => {
+          ttsCalls.push({ text, voice, stylePrompt });
+          const isSlow = stylePrompt === SPEECH_STYLE_PROFILES.learning_slow.style_prompt;
+          return {
+            ok: true,
+            httpStatus: 200,
+            providerRequestId: isSlow ? 'req-slow-1' : 'req-nat-1',
+            attempts: 1,
+            wavBytes: generateMockSpeechWav(
+              text,
+              'CZ-A0-M01-L01-PH001',
+              isSlow ? 'learning_slow' : 'natural'
+            ),
+          };
+        },
+        gcsUploader: async (bucket, objectName) => {
+          uploadedPaths.push(objectName);
+          return `gs://${bucket}/${objectName}`;
+        },
+      })
+    );
+
+    const variantServer = http.createServer(variantApp);
+    await new Promise<void>((resolve) => variantServer.listen(0, '127.0.0.1', () => resolve()));
+    const port = (variantServer.address() as { port: number }).port;
+    const url = `http://127.0.0.1:${port}`;
+
+    try {
+      const ownerToken = mintOwnerFirebaseToken();
+      const headers = {
+        Authorization: `Bearer ${ownerToken}`,
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'AhojAudioFactory',
+      };
+
+      // Generate PH001 Natural
+      const natRes = await fetch(`${url}/api/tts/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sourceId: 'CZ-A0-M01-L01-PH001',
+          speechStyle: 'natural',
+          mode: 'vertex',
+        }),
+      });
+      assert.equal(natRes.status, 200);
+      const natJson = (await natRes.json()) as { job: any };
+
+      // Generate PH001 Learning Slow
+      const slowRes = await fetch(`${url}/api/tts/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sourceId: 'CZ-A0-M01-L01-PH001',
+          speechStyle: 'learning_slow',
+          mode: 'vertex',
+        }),
+      });
+      assert.equal(slowRes.status, 200);
+      const slowJson = (await slowRes.json()) as { job: any };
+
+      // Verify exact style prompts passed to Vertex caller
+      assert.equal(ttsCalls.length, 2);
+      assert.equal(ttsCalls[0].stylePrompt, SPEECH_STYLE_PROFILES.natural.style_prompt);
+      assert.equal(ttsCalls[1].stylePrompt, SPEECH_STYLE_PROFILES.learning_slow.style_prompt);
+
+      // Verify distinct filenames, distinct GCS object paths, and distinct fingerprints
+      assert.notEqual(natJson.job.filename, slowJson.job.filename);
+      assert.notEqual(natJson.job.filename, legacyFilename);
+      assert.notEqual(slowJson.job.filename, legacyFilename);
+      assert.notEqual(natJson.job.fingerprint, slowJson.job.fingerprint);
+      assert.ok(natJson.job.gcs_object_path.startsWith('real/v0.9.20/natural/v1/'));
+      assert.ok(slowJson.job.gcs_object_path.startsWith('real/v0.9.20/learning_slow/v1/'));
+      assert.equal(uploadedPaths.length, 2);
+
+      // Verify state: legacy PH001 preserved untouched + only PH001 variants exist (PH003..PH006 NOT generated)
+      const stateRes = await fetch(`${url}/api/state`, {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      });
+      const snapshot = (await stateRes.json()) as {
+        sources: Array<{ source_id: string; cs_exact: string; text_sha256: string }>;
+        real_jobs: Record<string, any>;
+        qa: Record<string, any>;
+      };
+
+      assert.equal(snapshot.sources[0].cs_exact, 'Dobrý den.');
+      assert.equal(snapshot.sources[0].text_sha256, sha256Utf8('Dobrý den.'));
+      assert.equal(Object.keys(snapshot.real_jobs).length, 3);
+      assert.equal(snapshot.real_jobs['CZ-A0-M01-L01-PH001'].filename, legacyFilename);
+      assert.equal(snapshot.real_jobs['CZ-A0-M01-L01-PH001'].fingerprint, 'legacy-fp-do-not-overwrite');
+      assert.equal(snapshot.real_jobs['CZ-A0-M01-L01-PH001__natural'].speech_style, 'natural');
+      assert.equal(snapshot.real_jobs['CZ-A0-M01-L01-PH001__learning_slow'].speech_style, 'learning_slow');
+      assert.equal(snapshot.real_jobs['CZ-A0-M01-L01-PH003__natural'], undefined);
+
+      // Save separate QA: PASS for Natural, REVIEW for Learning Slow
+      const qaNatRes = await fetch(`${url}/api/qa/CZ-A0-M01-L01-PH001`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          speechStyle: 'natural',
+          listening_qa: 'PASS',
+          issue_category: 'verified_clean',
+          notes: 'Natural Czech intonation sounds good',
+        }),
+      });
+      assert.equal(qaNatRes.status, 200);
+
+      const qaSlowRes = await fetch(`${url}/api/qa/CZ-A0-M01-L01-PH001`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          speechStyle: 'learning_slow',
+          listening_qa: 'REVIEW',
+          issue_category: 'vowel_length',
+          notes: 'Hold final vowel slightly longer',
+        }),
+      });
+      assert.equal(qaSlowRes.status, 200);
+
+      // Drive sync MUST accept PASS Natural WAV
+      const drivePassRes = await fetch(`${url}/api/drive/sync-record`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          uploadedFiles: [
+            {
+              name: natJson.job.filename,
+              drive_file_id: 'drv-nat-1',
+              kind: 'wav',
+            },
+          ],
+        }),
+      });
+      assert.equal(drivePassRes.status, 200);
+
+      // Drive sync MUST block REVIEW Learning Slow WAV with 409 QA_GATE_BLOCKED_FOR_DRIVE
+      const driveBlockedRes = await fetch(`${url}/api/drive/sync-record`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          uploadedFiles: [
+            {
+              name: slowJson.job.filename,
+              drive_file_id: 'drv-slow-blocked',
+              kind: 'wav',
+            },
+          ],
+        }),
+      });
+      assert.equal(driveBlockedRes.status, 409);
+      const blockedPayload = (await driveBlockedRes.json()) as { code: string };
+      assert.equal(blockedPayload.code, 'QA_GATE_BLOCKED_FOR_DRIVE');
+    } finally {
+      await new Promise<void>((resolve) => variantServer.close(() => resolve()));
+    }
+  } finally {
+    process.chdir(prevCwd);
+    fs.rmSync(isolatedDir, { recursive: true, force: true });
+  }
+});
+

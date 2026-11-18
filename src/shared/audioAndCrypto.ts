@@ -1,4 +1,4 @@
-import type { SpeedProfile } from './types';
+import type { SpeechStyle, SpeedProfile } from './types';
 
 // Pure synchronous SHA-256 implementation (FIPS 180-4) for browser + Node.js parity
 const K = new Uint32Array([
@@ -84,6 +84,7 @@ export function sha256Utf8(text: string): string {
 }
 
 export const REQUEST_SCHEMA_VERSION = 'vertex-tts-v1-exact-text';
+export const REQUEST_SCHEMA_VERSION_STYLED = 'vertex-tts-v2-speech-metadata-style';
 
 export interface FingerprintInput {
   source_id: string;
@@ -92,26 +93,42 @@ export interface FingerprintInput {
   model: string;
   voice: string;
   speed_profile: SpeedProfile;
+  speech_style?: SpeechStyle;
+  style_version?: string;
   request_schema?: string;
 }
 
 export function computeGenerationFingerprint(input: FingerprintInput): string {
-  const canonical = [
+  const schema =
+    input.request_schema ??
+    (input.speech_style ? REQUEST_SCHEMA_VERSION_STYLED : REQUEST_SCHEMA_VERSION);
+  const parts = [
     input.source_id,
     input.dataset_version,
     input.exact_text_sha256,
     input.model,
     input.voice,
     input.speed_profile,
-    input.request_schema ?? REQUEST_SCHEMA_VERSION,
-  ].join('|');
-  return sha256Utf8(canonical);
+    schema,
+  ];
+  if (input.speech_style) {
+    parts.push(input.speech_style);
+  }
+  if (input.style_version) {
+    parts.push(input.style_version);
+  }
+  return sha256Utf8(parts.join('|'));
 }
 
 export function buildDeterministicFilename(input: FingerprintInput): string {
   const fp = computeGenerationFingerprint(input);
   const safeModel = input.model.replace(/[^a-zA-Z0-9._-]/g, '_');
   const safeVoice = input.voice.replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (input.speech_style) {
+    const safeStyle = input.speech_style.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeVersion = (input.style_version ?? 'v1').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return `${input.source_id}__${safeModel}__${safeVoice}__${safeStyle}__${safeVersion}__${fp.slice(0, 12)}.wav`;
+  }
   return `${input.source_id}__${safeModel}__${safeVoice}__${input.speed_profile}__${fp.slice(0, 12)}.wav`;
 }
 
@@ -291,20 +308,25 @@ export function parseWavHeader(wavBytes: Uint8Array): ParsedWavInfo {
  * SHA-256 verification, and ZIP export operate on real physical WAV files
  * while clearly marked MOCK (never counted as real Vertex production).
  */
-export function generateMockSpeechWav(text: string, sourceId: string): Uint8Array {
+export function generateMockSpeechWav(
+  text: string,
+  sourceId: string,
+  speechStyle: SpeechStyle = 'natural'
+): Uint8Array {
   const sampleRate = 24000;
   const wordCount = Math.max(2, text.trim().split(/\s+/).length);
-  const durationSec = Math.min(3.2, Math.max(0.95, 0.45 + wordCount * 0.38));
+  const baseSec = Math.min(3.2, Math.max(0.95, 0.45 + wordCount * 0.38));
+  const durationSec = speechStyle === 'learning_slow' ? Math.min(4.2, baseSec * 1.32) : baseSec;
   const totalSamples = Math.floor(sampleRate * durationSec);
   const pcm = new Uint8Array(totalSamples * 2);
   const view = new DataView(pcm.buffer);
 
-  // Seed base pitch deterministically from sourceId
-  let seed = 0;
+  // Seed base pitch deterministically from sourceId and style
+  let seed = speechStyle === 'learning_slow' ? 17 : 0;
   for (let i = 0; i < sourceId.length; i++) {
     seed = (seed * 31 + sourceId.charCodeAt(i)) >>> 0;
   }
-  const baseFreq = 165 + (seed % 55);
+  const baseFreq = speechStyle === 'learning_slow' ? 155 + (seed % 45) : 175 + (seed % 55);
 
   for (let i = 0; i < totalSamples; i++) {
     const t = i / sampleRate;

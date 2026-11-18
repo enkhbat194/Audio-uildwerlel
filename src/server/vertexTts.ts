@@ -2,6 +2,7 @@ import { GoogleAuth } from 'google-auth-library';
 import firebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
 import { parseWavHeader, wrapPcm16ToWav } from '../shared/audioAndCrypto';
 import {
+  SPEECH_STYLE_PROFILES,
   VERTEX_ENDPOINT,
   VERTEX_LOCATION,
   VERTEX_MODEL,
@@ -309,14 +310,46 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function buildVertexTtsRequestPayload(
+  exactCzechText: string,
+  voice = VERTEX_VOICE,
+  stylePrompt = SPEECH_STYLE_PROFILES.natural.style_prompt
+) {
+  return {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: exactCzechText,
+            speechMetadata: {
+              style: stylePrompt,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          voice,
+        },
+      },
+    },
+  };
+}
+
 export async function callVertexTtsWithRetry(
   exactCzechText: string,
   voice = VERTEX_VOICE,
-  maxRetries = 3
+  stylePrompt = SPEECH_STYLE_PROFILES.natural.style_prompt,
+  maxRetries = 3,
+  accessTokenOverride?: string
 ): Promise<VertexTtsCallResult> {
   let token: string;
   try {
-    token = await getAdcAccessToken();
+    token = accessTokenOverride ?? (await getAdcAccessToken());
   } catch (err) {
     return {
       ok: false,
@@ -329,17 +362,7 @@ export async function callVertexTtsWithRetry(
     };
   }
 
-  const payload = {
-    contents: [{ role: 'user', parts: [{ text: exactCzechText }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          voice,
-        },
-      },
-    },
-  };
+  const payload = buildVertexTtsRequestPayload(exactCzechText, voice, stylePrompt);
 
   let attempts = 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
