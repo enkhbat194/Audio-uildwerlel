@@ -13,6 +13,7 @@ on:
       - qa/requests/VOICE_QA_RUN_20261119.json
       - qa/requests/VOICE_QA_NATURAL_REPAIR_20261119.json
       - qa/requests/VOICE_QA_FLUENT_V2_20261119.json
+      - production/requests/2026-11-19-pilot4.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -244,4 +245,61 @@ jobs:
           name: ahoj-fluent-v2-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-fluent-v2/
           retention-days: 14
+          if-no-files-found: warn
+
+  curriculum-teacher-pilot-four:
+    name: Produce first lesson four phrases x two styles, automatic QA
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): first lesson pilot4 one-shot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out source-locked experiment branch
+        uses: actions/checkout@v4
+      - name: Authenticate using existing branch-restricted WIF account
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Offline Czech ASR dependencies
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Run bounded real TTS + QA, never publish rejected or draft lessons
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/produce_curriculum_batch.py scripts/auto_audio_qa.py scripts/voice_quality_full_sentence.py
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-first-4-verified.json \
+            --out-dir "${{ runner.temp }}/ahoj-curriculum-pilot4" \
+            --generate
+          python3 - <<'PY'
+          import json
+          p = r"${{ runner.temp }}/ahoj-curriculum-pilot4/production_report.json"
+          data = json.load(open(p))
+          assert data["attempted_calls"] <= 8
+          assert data["release_allowed"] is False
+          assert len(data["rows"]) == 8
+          print("PRODUCTION_PILOT4_RESULT", json.dumps(data["counts"], sort_keys=True))
+          PY
+      - name: Save passed WAVs, quarantines, immutable QA and source manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-lesson-pilot4-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-curriculum-pilot4/
+          retention-days: 30
           if-no-files-found: warn
