@@ -16,6 +16,7 @@ on:
       - production/requests/2026-11-19-pilot4.json
       - production/requests/2026-11-19-repair-jm.json
       - production/requests/2026-11-19-dialogue-b01.json
+      - production/requests/2026-11-19-dialogue-bat-repair.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -404,5 +405,51 @@ jobs:
         with:
           name: ahoj-a0-dialogue-B01-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-dialogue-a0-b01/
+          retention-days: 30
+          if-no-files-found: warn
+
+  curriculum-dialogue-bat-name-repair:
+    name: Correct B01-T02 Bat final consonant, exactly one TTS call
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): dialogue Bat single correction'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keyless authentication by existing Google WIF account
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1200s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Install offline Czech ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Re-record only Bat's introduction and auto-check transcript
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json \
+            --out-dir "${{ runner.temp }}/ahoj-dialogue-bat-repair" \
+            --only-source CZ-A0-M01-L01-B01-T02 \
+            --only-style natural --repair-bat --generate
+      - name: Store machine-reviewed candidate without release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-dialogue-bat-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-dialogue-bat-repair/
           retention-days: 30
           if-no-files-found: warn
