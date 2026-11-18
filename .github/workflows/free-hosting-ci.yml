@@ -38,3 +38,25 @@ jobs:
         run: bun run build
       - name: Confirm build artifact
         run: test -f dist/index.html
+      - name: Smoke test production server and owner protection
+        env:
+          NODE_ENV: production
+          PORT: "8765"
+        run: |
+          bun run server.ts > /tmp/ahoj-api.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 25); do
+            if curl --silent --fail http://127.0.0.1:8765/api/health > /tmp/ahoj-health.json; then
+              break
+            fi
+            sleep 1
+          done
+          if [ ! -s /tmp/ahoj-health.json ]; then
+            cat /tmp/ahoj-api.log
+            exit 1
+          fi
+          node -e 'const h=require("/tmp/ahoj-health.json"); if(h.ok!==true||h.auth_required!==true)process.exit(1)'
+          unauth_code=$(curl --silent --output /tmp/ahoj-unauth.json --write-out '%{http_code}' http://127.0.0.1:8765/api/state)
+          test "$unauth_code" = "401"
+          node -e 'const d=require("/tmp/ahoj-unauth.json"); if(d.code!=="OWNER_AUTH_REQUIRED")process.exit(1)'
