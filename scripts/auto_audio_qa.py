@@ -91,6 +91,33 @@ def inspect_wav(path: Path) -> dict:
         if not chunk or (math.sqrt(sum(int(v) * int(v) for v in chunk) / len(chunk)) / 32768) < 0.003:
             quiet += 1
     silent_ratio = quiet / max(1, windows)
+    # Detect perceptually disruptive silence INSIDE the spoken utterance.
+    # Leading/trailing encoder padding is ignored. This checks pacing independently
+    # of ASR, which can transcribe every word while missing awkward breaks.
+    pause_window = max(1, int(rate * 0.02))
+    pause_energies = []
+    for i in range(0, n, pause_window):
+        samples = pcm[i:i + pause_window]
+        pause_energies.append(math.sqrt(sum(int(v) * int(v) for v in samples) / max(1, len(samples))) / 32768)
+    active = [i for i, value in enumerate(pause_energies) if value >= 0.018]
+    internal_pauses = []
+    if active:
+        start, finish = active[0], active[-1]
+        gap_start = None
+        for i in range(start, finish + 2):
+            silent = i <= finish and pause_energies[i] < 0.018
+            if silent and gap_start is None:
+                gap_start = i
+            elif not silent and gap_start is not None:
+                duration = (i - gap_start) * 0.02
+                if duration >= 0.16:
+                    internal_pauses.append({
+                        "from_seconds": round(gap_start * 0.02, 3),
+                        "to_seconds": round(i * 0.02, 3),
+                        "duration_seconds": round(duration, 3),
+                    })
+                gap_start = None
+    max_internal_pause = max((p["duration_seconds"] for p in internal_pauses), default=0)
     if rms < 0.005:
         reasons.append("SILENCE_OR_VERY_LOW_VOLUME")
     if clipped > 0.002:
@@ -109,6 +136,8 @@ def inspect_wav(path: Path) -> dict:
         "peak_dbfs": round(20 * math.log10(max(peak, 1e-10)), 2),
         "clipped_fraction": round(clipped, 6),
         "silent_window_fraction": round(silent_ratio, 4),
+        "internal_pauses": internal_pauses,
+        "max_internal_pause_seconds": max_internal_pause,
     }
 
 
@@ -161,6 +190,14 @@ def main() -> int:
         path = input_dir / f"QA_ONLY_FULL_SENTENCE_{style}.wav"
         technical = inspect_wav(path)
         record = receipt.get("variants", {}).get(style) or {}
+        # Project QA threshold (not a CEFR numerical rule).
+        # Natural speech should flow; learner audio may be slightly more spaced
+        # but must not sound like the voice is searching for words.
+        max_allowed_pause = 0.34 if style == "natural" else 0.38
+        technical["max_allowed_internal_pause_seconds"] = max_allowed_pause
+        if technical.get("max_internal_pause_seconds", 0) > max_allowed_pause:
+            technical["technical_pass"] = False
+            technical["reasons"].append("UNNATURAL_MID_SENTENCE_PAUSE")
         expected_sha = record.get("audio_sha256")
         if expected_sha != technical.get("sha256"):
             technical["technical_pass"] = False
