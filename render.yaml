@@ -15,3 +15,5 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: FREE_HOSTING_POC
+        value: 'true'
