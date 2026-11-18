@@ -111,7 +111,7 @@ jobs:
           python3 -m py_compile scripts/voice_quality_full_sentence.py
           python3 scripts/voice_quality_full_sentence.py --generate --artifact-only
       - name: Install offline ASR for zero-touch QA
-        run: python3 -m pip install --disable-pip-version-check 'faster-whisper>=1.1,<2'
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
       - name: Automatically check Czech text and audio quality
         if: success()
         env:
@@ -165,7 +165,7 @@ jobs:
           python3 scripts/voice_quality_full_sentence.py \
             --generate --artifact-only --only-style natural --natural-repair
       - name: Install offline ASR
-        run: python3 -m pip install --disable-pip-version-check 'faster-whisper>=1.1,<2'
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
       - name: Automatic transcript QA; quarantine any mismatch
         env:
           AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-natural-repair
