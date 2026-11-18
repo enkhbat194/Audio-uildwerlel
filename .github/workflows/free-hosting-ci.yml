@@ -43,6 +43,13 @@ jobs:
           grep -q 'DRY RUN' /tmp/wif-dry-run.txt
           grep -q 'No service account JSON keys' /tmp/wif-dry-run.txt
           grep -q 'ahoj-gh-preflight' /tmp/wif-dry-run.txt
+      - name: Dry-run full-sentence voice quality protocol (zero API calls)
+        run: |
+          python3 -m py_compile scripts/voice_quality_full_sentence.py
+          python3 scripts/voice_quality_full_sentence.py > /tmp/ahoj-full-sentence-dry-run.txt
+          grep -q 'DRY_RUN_OK' /tmp/ahoj-full-sentence-dry-run.txt
+          grep -q 'Můžete mi prosím říct' /tmp/ahoj-full-sentence-dry-run.txt
+          grep -q 'QA only' /tmp/ahoj-full-sentence-dry-run.txt
       - name: Confirm build artifact
         run: test -f dist/index.html
       - name: Build isolated Render preview and inspect output
