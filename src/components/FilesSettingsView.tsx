@@ -60,7 +60,7 @@ export function FilesSettingsView({
       row: sourceById.get(job.source_id),
       job,
       qaRec: getQaForJob(qa, job),
-      driveEligible: isJobDriveEligible(job, qa),
+      driveEligible: isJobDriveEligible(job, qa, sourceById.get(job.source_id)),
     }));
 
   const driveEligibleReal = realDownloadable.filter((item) => item.driveEligible);
