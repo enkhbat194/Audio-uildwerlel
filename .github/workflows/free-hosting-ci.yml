@@ -60,3 +60,26 @@ jobs:
           unauth_code=$(curl --silent --output /tmp/ahoj-unauth.json --write-out '%{http_code}' http://127.0.0.1:8765/api/state)
           test "$unauth_code" = "401"
           node -e 'const d=require("/tmp/ahoj-unauth.json"); if(d.code!=="OWNER_AUTH_REQUIRED")process.exit(1)'
+      - name: Smoke test free-hosting read-only safeguard
+        env:
+          NODE_ENV: production
+          FREE_HOSTING_POC: "true"
+          PORT: "8766"
+        run: |
+          bun run server.ts > /tmp/ahoj-poc.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 25); do
+            if curl --silent --fail http://127.0.0.1:8766/api/health > /tmp/ahoj-poc-health.json; then
+              break
+            fi
+            sleep 1
+          done
+          test -s /tmp/ahoj-poc-health.json || { cat /tmp/ahoj-poc.log; exit 1; }
+          echo "Check that a billable TTS request fails BEFORE calling Vertex AI"
+          blocked_code=$(curl --silent --output /tmp/ahoj-poc-blocked.json --write-out '%{http_code}' -H 'content-type: application/json' -d '{"sourceId":"CZ-A0-M01-L01-PH001","mode":"vertex"}' http://127.0.0.1:8766/api/tts/generate)
+          test "$blocked_code" = "403"
+          node -e 'const d=require("/tmp/ahoj-poc-blocked.json"); if(d.code!=="FREE_HOSTING_READ_ONLY")process.exit(1)'
+          echo "Check that the registry is still owner-protected"
+          private_code=$(curl --silent --output /tmp/ahoj-poc-private.json --write-out '%{http_code}' http://127.0.0.1:8766/api/state)
+          test "$private_code" = "401"
