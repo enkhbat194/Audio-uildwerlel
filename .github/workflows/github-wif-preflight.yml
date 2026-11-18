@@ -11,6 +11,7 @@ on:
       - scripts/bootstrap-github-wif.sh
       - docs/GITHUB_WIF_HANDOFF.md
       - qa/requests/VOICE_QA_RUN_20261119.json
+      - qa/requests/VOICE_QA_NATURAL_REPAIR_20261119.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -127,4 +128,57 @@ jobs:
           name: ahoj-full-sentence-voice-qa-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-voice-qa/
           retention-days: 7
+          if-no-files-found: warn
+
+  voice-quality-natural-repair:
+    name: One bounded Natural correction + automatic QA (no manual approval)
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'qa(run): one bounded natural re-render and auto-qa'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out experiment branch
+        uses: actions/checkout@v4
+      - name: Authenticate with the already-approved GitHub WIF identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 600s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Re-render ONLY Natural once without changing the Czech text
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-natural-repair
+          GITHUB_ACTIONS: 'true'
+        run: |
+          python3 scripts/voice_quality_full_sentence.py \
+            --generate --artifact-only --only-style natural --natural-repair
+      - name: Install offline ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper>=1.1,<2'
+      - name: Automatic transcript QA; quarantine any mismatch
+        env:
+          AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-natural-repair
+        run: |
+          python3 scripts/auto_audio_qa.py \
+            --input-dir "$AHOJ_VOICE_QA_OUTPUT_DIR" \
+            --output "$AHOJ_VOICE_QA_OUTPUT_DIR/auto_qa_report.json" \
+            --model small
+      - name: Save corrected WAV and automatic QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-natural-auto-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-natural-repair/
+          retention-days: 14
           if-no-files-found: warn
