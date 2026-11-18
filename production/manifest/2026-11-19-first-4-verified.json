@@ -1,0 +1,66 @@
+{
+  "batch_id": "AHOJ_V0920_PILOT4_TEACHER_DIALOGUE_CONTEXT_20261119",
+  "project": "Ahoj Cesko Audio Factory",
+  "dataset_version": "v0.9.20",
+  "source_authority": "src/shared/sourceRegistry.ts SEED_FIRST_FIVE_ROWS, exact Czech strings and SHA-256",
+  "scope": "PRIVATE_INTERNAL_STAGING_ONLY",
+  "publish_allowed": false,
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "max_billable_requests": 8,
+  "variants": [
+    "natural",
+    "learning_slow"
+  ],
+  "pedagogy": "CEFR-informed adult Czech A0: connected Czech delivery with teacher clarity; dialogue turns get only source-grounded pragmatic expression.",
+  "rows": [
+    {
+      "source_id": "CZ-A0-M01-L01-PH001",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Dobrý den.",
+      "text_sha256": "d00f594ba38748a33a764dcbb341c5618ef80c4a8a49821e00dd9226088dd370",
+      "source_gate": "language_prosody_review",
+      "kind": "phrase",
+      "register": "formal",
+      "speaker_role": "teacher",
+      "intent": "polite_greeting",
+      "emotion": "polite_warmth"
+    },
+    {
+      "source_id": "CZ-A0-M01-L01-PH003",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Jak se jmenujete?",
+      "text_sha256": "9e2b678bd1e7e3de4649ffb6c1d376649a2dc46d0b05e2a99994d784a99f54b3",
+      "source_gate": "language_prosody_review",
+      "kind": "phrase",
+      "register": "formal",
+      "speaker_role": "teacher",
+      "intent": "polite_question",
+      "emotion": "neutral"
+    },
+    {
+      "source_id": "CZ-A0-M01-L01-PH004",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Jsem z Mongolska.",
+      "text_sha256": "d12e5e94df47f400714004765a2836caf6a47fa9eda075ec03f51924cc45881f",
+      "source_gate": "language_prosody_review",
+      "kind": "phrase",
+      "register": "neutral",
+      "speaker_role": "teacher",
+      "intent": "self_introduction",
+      "emotion": "neutral"
+    },
+    {
+      "source_id": "CZ-A0-M01-L01-PH005",
+      "lesson_id": "CZ-A0-M01-L01",
+      "cs_exact": "Nerozumím.",
+      "text_sha256": "3dbe64054c73f1083313d5fb2f9b4a01edee2bf952835dd7cac380c247055985",
+      "source_gate": "language_prosody_review",
+      "kind": "phrase",
+      "register": "neutral",
+      "speaker_role": "teacher",
+      "intent": "request_clarification",
+      "emotion": "neutral"
+    }
+  ]
+}
