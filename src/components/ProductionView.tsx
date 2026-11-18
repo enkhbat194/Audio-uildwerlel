@@ -8,17 +8,25 @@ import {
   Play,
   RotateCcw,
   ShieldAlert,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { authedFetch, downloadAuthedFile } from '../lib/apiClient';
+import {
+  SPEECH_STYLE_PROFILES,
+  getQaForJob,
+  getVariantKey,
+} from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
   CloudRuntimeStatus,
   ExecutionMode,
+  QaRecord,
   SourceRow,
+  SpeechStyle,
 } from '../shared/types';
-import { JobStatusLabel } from './StatusBadge';
+import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
 
 const FIRST_PILOT_ID = 'CZ-A0-M01-L01-PH001';
 
@@ -26,10 +34,13 @@ interface ProductionViewProps {
   sources: SourceRow[];
   realJobs: Record<string, AudioJobReceipt>;
   mockJobs: Record<string, AudioJobReceipt>;
+  qa: Record<string, QaRecord>;
   mode: ExecutionMode;
   runtime: CloudRuntimeStatus;
   selectedVoice: string;
   onChangeVoice: (voice: string) => void;
+  selectedSpeechStyle: SpeechStyle;
+  onChangeSpeechStyle: (style: SpeechStyle) => void;
   isBatchRunning: boolean;
   isBatchPaused: boolean;
   activeRowId: string | null;
@@ -37,19 +48,201 @@ interface ProductionViewProps {
   onOpenConfirmModal: () => void;
   onCloseConfirmModal: () => void;
   onRunBatch: (ackPrivateTest: boolean, onlyFirstRow?: boolean) => void;
+  onGeneratePh001Variant: (style: SpeechStyle) => Promise<void>;
   onPauseBatch: () => void;
   onResetMock: () => Promise<void>;
-  onGoToQa: (sourceId: string) => void;
+  onGoToQa: (sourceId: string, style?: SpeechStyle) => void;
+}
+
+function useAuthedAudioBlobUrl(job: AudioJobReceipt | undefined) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const ready = Boolean(
+    job &&
+      ((job.is_mock && job.status === 'MOCK') || (!job.is_mock && job.status === 'REAL_SUCCESS'))
+  );
+
+  useEffect(() => {
+    let active = true;
+    let currentUrl: string | null = null;
+    setBlobUrl(null);
+
+    async function load() {
+      if (!ready || !job?.filename) return;
+      try {
+        const scope = job.is_mock ? 'mock' : 'real';
+        const res = await authedFetch(
+          `/api/audio/${scope}/${encodeURIComponent(job.filename)}?v=${encodeURIComponent(
+            job.updated_at
+          )}`
+        );
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (!active) return;
+        currentUrl = URL.createObjectURL(blob);
+        setBlobUrl(currentUrl);
+      } catch {
+        // Ignore transient preview audio load failure
+      }
+    }
+
+    void load();
+    return () => {
+      active = false;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
+  }, [ready, job?.is_mock, job?.filename, job?.updated_at]);
+
+  return blobUrl;
+}
+
+interface Ph001VariantCardProps {
+  title: string;
+  subtitle: string;
+  job: AudioJobReceipt | undefined;
+  qaMap: Record<string, QaRecord>;
+  style?: SpeechStyle;
+  isLegacy?: boolean;
+  canGenerate: boolean;
+  isBusy: boolean;
+  onGenerate?: () => void;
+  onGoToQa: (sourceId: string, style?: SpeechStyle) => void;
+}
+
+function Ph001VariantCard({
+  title,
+  subtitle,
+  job,
+  qaMap,
+  style,
+  isLegacy = false,
+  canGenerate,
+  isBusy,
+  onGenerate,
+  onGoToQa,
+}: Ph001VariantCardProps) {
+  const playable = Boolean(
+    job &&
+      ((job.is_mock && job.status === 'MOCK') || (!job.is_mock && job.status === 'REAL_SUCCESS'))
+  );
+  const audioUrl = useAuthedAudioBlobUrl(playable ? job : undefined);
+  const qaRec = job ? getQaForJob(qaMap, job) : undefined;
+  const scope = job?.is_mock ? 'mock' : 'real';
+
+  return (
+    <div
+      className={`rounded-xl border p-4 space-y-3 ${
+        playable
+          ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-900/70'
+          : 'bg-slate-50/80 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800'
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">{title}</h3>
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {qaRec && <QaStatusLabel status={qaRec.listening_qa} />}
+          <JobStatusLabel status={job?.status ?? 'PENDING'} />
+        </div>
+      </div>
+
+      {playable && job ? (
+        <div className="space-y-2.5">
+          {audioUrl && (
+            <audio
+              controls
+              src={audioUrl}
+              aria-label={`${title} audio player`}
+              className="w-full"
+            />
+          )}
+          <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-0.5 tabular-nums">
+            <p>
+              {job.duration_ms ?? '—'} ms ·{' '}
+              {job.file_size ? `${(job.file_size / 1024).toFixed(1)} KB` : '—'} · HTTP{' '}
+              {job.http_status ?? 'MOCK'}
+            </p>
+            <p className="truncate" title={job.filename}>
+              Файл: {job.filename}
+            </p>
+            <p className="truncate" title={job.gcs_object_path ?? job.storage_ref ?? undefined}>
+              Хадгалалт: {job.gcs_object_path ?? job.storage_ref}
+            </p>
+            {job.audio_sha256 && (
+              <p className="truncate" title={job.audio_sha256}>
+                SHA256: {job.audio_sha256.slice(0, 18)}…
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {!isLegacy && onGenerate && (
+              <button
+                type="button"
+                disabled={!canGenerate || isBusy}
+                onClick={onGenerate}
+                className="min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+              >
+                Дахин үүсгэх
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                void downloadAuthedFile(
+                  `/api/audio/${scope}/${encodeURIComponent(job.filename)}`,
+                  job.filename
+                )
+              }
+              className="min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Татах</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onGoToQa(FIRST_PILOT_ID, style)}
+              className="min-h-[38px] px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Headphones className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Сонсох / QA</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2.5 pt-1">
+          {job?.last_error && (
+            <p className="text-xs text-red-700 dark:text-red-400">{job.last_error}</p>
+          )}
+          {!isLegacy && onGenerate && (
+            <button
+              type="button"
+              disabled={!canGenerate || isBusy}
+              onClick={onGenerate}
+              className="min-h-[42px] w-full px-4 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-40 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{title} · Зөвхөн PH001 үүсгэх</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ProductionView({
   sources,
   realJobs,
   mockJobs,
+  qa,
   mode,
   runtime,
   selectedVoice,
   onChangeVoice,
+  selectedSpeechStyle,
+  onChangeSpeechStyle,
   isBatchRunning,
   isBatchPaused,
   activeRowId,
@@ -57,13 +250,12 @@ export function ProductionView({
   onOpenConfirmModal,
   onCloseConfirmModal,
   onRunBatch,
+  onGeneratePh001Variant,
   onPauseBatch,
   onResetMock,
   onGoToQa,
 }: ProductionViewProps) {
   const [ackPrivateTest, setAckPrivateTest] = useState(false);
-  const [speedTab, setSpeedTab] = useState<'normal' | 'slow'>('normal');
-  const [ph001BlobUrl, setPh001BlobUrl] = useState<string | null>(null);
 
   const activeJobs = mode === 'mock' ? mockJobs : realJobs;
   const queueRows = sources.slice(0, runtime.max_first_batch);
@@ -75,47 +267,21 @@ export function ProductionView({
 
   const hasHoldFlag = effectiveRowsToRun.some((r) => r.source_gate === 'BLOCK_DOMAIN');
   const completedCount = queueRows.filter((r) => {
-    const j = activeJobs[r.source_id];
+    const j = activeJobs[getVariantKey(r.source_id, selectedSpeechStyle)];
     return j && (j.status === 'REAL_SUCCESS' || j.status === 'MOCK');
   }).length;
   const mockPresent = Object.keys(mockJobs).length > 0;
 
-  const ph001RealJob = realJobs[FIRST_PILOT_ID];
-  const ph001Verified = Boolean(
-    ph001RealJob && ph001RealJob.status === 'REAL_SUCCESS' && !ph001RealJob.is_mock
-  );
+  const activeStyleDef = SPEECH_STYLE_PROFILES[selectedSpeechStyle];
+  const ph001NaturalJob = activeJobs[getVariantKey(FIRST_PILOT_ID, 'natural')];
+  const ph001SlowJob = activeJobs[getVariantKey(FIRST_PILOT_ID, 'learning_slow')];
+  const ph001LegacyJob = activeJobs[FIRST_PILOT_ID];
 
-  useEffect(() => {
-    let active = true;
-    let currentUrl: string | null = null;
-
-    async function loadPh001Audio() {
-      if (!ph001Verified || !ph001RealJob?.filename) {
-        setPh001BlobUrl(null);
-        return;
-      }
-      try {
-        const res = await authedFetch(
-          `/api/audio/real/${encodeURIComponent(ph001RealJob.filename)}?v=${encodeURIComponent(
-            ph001RealJob.updated_at
-          )}`
-        );
-        if (!res.ok) return;
-        const blob = await res.blob();
-        if (!active) return;
-        currentUrl = URL.createObjectURL(blob);
-        setPh001BlobUrl(currentUrl);
-      } catch {
-        // Ignore preview fetch failure
-      }
-    }
-
-    void loadPh001Audio();
-    return () => {
-      active = false;
-      if (currentUrl) URL.revokeObjectURL(currentUrl);
-    };
-  }, [ph001Verified, ph001RealJob?.filename, ph001RealJob?.updated_at]);
+  const vertexReadyForReal =
+    runtime.vertex_connected &&
+    runtime.storage_backend === 'gcs-private-bucket' &&
+    runtime.gcs_permission_verified;
+  const canGeneratePh001Now = mode === 'mock' || vertexReadyForReal;
 
   return (
     <div className="space-y-6">
@@ -125,7 +291,11 @@ export function ProductionView({
             Үйлдвэрлэл (Эхний 5 эгнээ)
           </h1>
           <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-            Дараалал: concurrency=1 · {mode === 'mock' ? 'MOCK ба Real зам тусдаа' : 'Эхлээд PH001 — 1 бодит WAV баталгаажуулна'}.
+            Ярианы хэв маяг: <span className="font-semibold">{activeStyleDef.short_label} ({activeStyleDef.style_version})</span> ·{' '}
+            {mode === 'mock'
+              ? 'MOCK ба Real зам тусдаа'
+              : 'Эхлээд PH001 — Natural / Learning Slow тус тусад нь туршина'}
+            .
           </p>
         </div>
 
@@ -162,134 +332,182 @@ export function ProductionView({
               <Play className="w-4 h-4" aria-hidden="true" />
               <span>
                 {isFirstRealGateActive
-                  ? '1 бодит WAV (PH001) үүсгэх'
+                  ? `PH001 · ${activeStyleDef.short_label} (1 WAV) үүсгэх`
                   : mode === 'mock'
-                  ? 'MOCK 5 аудио үүсгэх'
-                  : 'Үлдсэн бодит WAV үүсгэх'}
+                  ? `MOCK 5 (${activeStyleDef.short_label}) үүсгэх`
+                  : `Үлдсэн мөр · ${activeStyleDef.short_label}`}
               </span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Verified PH001 Real WAV Inspection Card */}
-      {ph001Verified && ph001RealJob && (
-        <section className="bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <h2 className="text-sm font-bold text-emerald-950 dark:text-emerald-200">
-                  PH001 — Dobrý den. (Эхний бодит WAV баталгаажлаа)
-                </h2>
-                <p className="text-xs font-mono text-emerald-800 dark:text-emerald-300 mt-0.5 tabular-nums">
-                  HTTP {ph001RealJob.http_status} · {ph001RealJob.duration_ms} ms ·{' '}
-                  {ph001RealJob.file_size ? `${(ph001RealJob.file_size / 1024).toFixed(1)} KB` : '—'} ·{' '}
-                  {ph001RealJob.storage_ref}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                void downloadAuthedFile(
-                  `/api/audio/real/${encodeURIComponent(ph001RealJob.filename)}`,
-                  ph001RealJob.filename
-                )
-              }
-              className="min-h-[40px] px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+      {/* Voice & Speech Style Profile Selector Panel */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div>
+            <label
+              htmlFor="voice-select"
+              className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
             >
-              <Download className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>PH001 WAV татах</span>
-            </button>
+              Загвар ба Дуу хоолой (Model / Voice)
+            </label>
+            <select
+              id="voice-select"
+              value={selectedVoice}
+              onChange={(e) => onChangeVoice(e.target.value)}
+              className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600"
+            >
+              <option value="Achernar">gemini-3.8-flash-tts · Achernar</option>
+            </select>
           </div>
 
-          <p className="text-xs font-mono text-emerald-900 dark:text-emerald-300 break-all">
-            SHA256: {ph001RealJob.audio_sha256}
-          </p>
+          <div>
+            <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Ярианы хэв маяг (speechMetadata.style)
+            </span>
+            <div
+              role="group"
+              aria-label="Ярианы хэв маяг"
+              className="inline-flex w-full p-1 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1"
+            >
+              {(['natural', 'learning_slow'] as SpeechStyle[]).map((styleKey) => {
+                const def = SPEECH_STYLE_PROFILES[styleKey];
+                const selected = selectedSpeechStyle === styleKey;
+                return (
+                  <button
+                    key={styleKey}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onChangeSpeechStyle(styleKey)}
+                    className={`flex-1 min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                      selected
+                        ? 'bg-white dark:bg-slate-950 text-sky-900 dark:text-sky-200 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {def.short_label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          {ph001BlobUrl && <audio controls src={ph001BlobUrl} className="w-full" />}
-        </section>
-      )}
-
-      {/* Voice & Speed Profile Settings Panel */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div>
-          <label htmlFor="voice-select" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-            Дуу хоолой (Voice)
-          </label>
-          <select
-            id="voice-select"
-            value={selectedVoice}
-            onChange={(e) => onChangeVoice(e.target.value)}
-            className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600"
-          >
-            <option value="Achernar">Achernar (Үндсэн туршилтын хоолой)</option>
-          </select>
+          <div>
+            <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              {activeStyleDef.short_label} багцын явц ({completedCount} / {queueRows.length})
+            </span>
+            <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden mt-3">
+              <div
+                className={`h-full transition-all duration-150 ${
+                  mode === 'mock' ? 'bg-amber-500' : 'bg-sky-600'
+                }`}
+                style={{
+                  width: `${Math.round((completedCount / Math.max(1, queueRows.length)) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-mono tabular-nums">
+              Горим: {mode === 'mock' ? 'MOCK (Тусгаарлагдсан)' : runtime.vertex_connected ? 'REAL VERTEX AI' : 'NOT_CONNECTED'} · Style: {activeStyleDef.style_version}
+            </p>
+          </div>
         </div>
 
-        <div>
-          <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-            Хурдны горим (Speed Profile)
-          </span>
-          <div role="group" aria-label="Хурдны горим" className="inline-flex w-full p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setSpeedTab('normal')}
-              className={`flex-1 min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer ${
-                speedTab === 'normal'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              Normal (Идэвхтэй)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSpeedTab('slow')}
-              className={`flex-1 min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer ${
-                speedTab === 'slow'
-                  ? 'bg-white dark:bg-slate-950 text-amber-700 dark:text-amber-400 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400'
-              }`}
-            >
-              Slow (Түр хаалттай)
-            </button>
+        {/* Active speechMetadata.style prompt preview */}
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {activeStyleDef.label_mn}
+            </span>
+            <span className="font-mono text-slate-500 dark:text-slate-400">
+              style=&quot;{selectedSpeechStyle}&quot; · {activeStyleDef.style_version}
+            </span>
           </div>
-          {speedTab === 'slow' && (
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-              Баталгаажсан prompt болон пилот тест хийгдээгүй тул Slow экспорт хэрэгжүүлээгүй. Энгийн аудиог дижиталаар удаашруулж хадгалахгүй.
-            </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{activeStyleDef.description_mn}</p>
+          <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 break-words">
+            speechMetadata.style: &quot;{activeStyleDef.style_prompt}&quot;
+          </p>
+        </div>
+      </section>
+
+      {/* PH001 Side-by-Side Voice Quality Comparison Workbench */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-start gap-2.5">
+            <Sparkles className="w-5 h-5 text-sky-700 dark:text-sky-400 shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                PH001 — Dobrý den. (Natural / Learning Slow харьцуулалт)
+              </h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Эхлээд зөвхөн PH001 дээр хоёр хувилбарыг тус тусад нь үүсгэж сонсоод харьцуулна. Үлдсэн 4 өгүүлбэрийг автоматаар үүсгэхгүй, өмнөх PH001 WAV файлыг устгахгүй.
+              </p>
+            </div>
+          </div>
+          {mode === 'vertex' && !vertexReadyForReal && (
+            <span className="text-xs font-mono text-amber-700 dark:text-amber-400 shrink-0">
+              Preview орчин · Бодит TTS хаалттай
+            </span>
           )}
         </div>
 
-        <div>
-          <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-            Багцын явц ({completedCount} / {queueRows.length})
-          </span>
-          <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden mt-3">
-            <div
-              className={`h-full transition-all duration-150 ${
-                mode === 'mock' ? 'bg-amber-500' : 'bg-sky-600'
-              }`}
-              style={{ width: `${Math.round((completedCount / Math.max(1, queueRows.length)) * 100)}%` }}
+        <div
+          className={`grid grid-cols-1 ${
+            ph001LegacyJob ? 'lg:grid-cols-3' : 'md:grid-cols-2'
+          } gap-4`}
+        >
+          <Ph001VariantCard
+            title="1. Natural (v1)"
+            subtitle="Өдөр тутмын уугуул чех харилцан ярианы дулаан, амьд хэмнэл."
+            job={ph001NaturalJob}
+            qaMap={qa}
+            style="natural"
+            canGenerate={canGeneratePh001Now}
+            isBusy={isBatchRunning}
+            onGenerate={() => void onGeneratePh001Variant('natural')}
+            onGoToQa={onGoToQa}
+          />
+
+          <Ph001VariantCard
+            title="2. Learning Slow (v1)"
+            subtitle="Анхан шатны суралцагчид зориулсан тайван, тод, холбоотой удаан хэллэг."
+            job={ph001SlowJob}
+            qaMap={qa}
+            style="learning_slow"
+            canGenerate={canGeneratePh001Now}
+            isBusy={isBatchRunning}
+            onGenerate={() => void onGeneratePh001Variant('learning_slow')}
+            onGoToQa={onGoToQa}
+          />
+
+          {ph001LegacyJob && (
+            <Ph001VariantCard
+              title="Анхны PH001 (Legacy)"
+              subtitle="Хуучин PH001 файл хадгалагдсан (устгахгүй, дарж бичихгүй)."
+              job={ph001LegacyJob}
+              qaMap={qa}
+              isLegacy
+              canGenerate={false}
+              isBusy={isBatchRunning}
+              onGoToQa={onGoToQa}
             />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-mono tabular-nums">
-            Горим: {mode === 'mock' ? 'MOCK (Тусгаарлагдсан)' : runtime.vertex_connected ? 'REAL VERTEX AI' : 'NOT_CONNECTED'} · Max batch: {runtime.max_first_batch}
-          </p>
+          )}
         </div>
       </section>
 
       {/* Queue Rows */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800">
         {queueRows.map((row) => {
-          const job = activeJobs[row.source_id];
+          const variantKey = getVariantKey(row.source_id, selectedSpeechStyle);
+          const job = activeJobs[variantKey];
+          const naturalJob = activeJobs[getVariantKey(row.source_id, 'natural')];
+          const slowJob = activeJobs[getVariantKey(row.source_id, 'learning_slow')];
           const isRunning = activeRowId === row.source_id;
           const lockedBehindPh001 = isFirstRealGateActive && row.source_id !== FIRST_PILOT_ID;
           const displayStatus = isRunning
             ? 'RUNNING'
-            : job?.status ?? (runtime.vertex_connected || mode === 'mock' ? 'PENDING' : 'NOT_CONNECTED');
+            : job?.status ??
+              (runtime.vertex_connected || mode === 'mock' ? 'PENDING' : 'NOT_CONNECTED');
           const playable = job && (job.status === 'MOCK' || job.status === 'REAL_SUCCESS');
 
           return (
@@ -301,9 +519,15 @@ export function ProductionView({
             >
               <div className="space-y-1.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{row.source_id}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {row.source_id}
+                  </span>
                   <span aria-hidden="true">·</span>
                   <span>#{row.pilot_order}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-sky-700 dark:text-sky-400">
+                    {activeStyleDef.short_label} ({activeStyleDef.style_version})
+                  </span>
                   {row.source_gate === 'BLOCK_DOMAIN' && (
                     <>
                       <span aria-hidden="true">·</span>
@@ -331,7 +555,9 @@ export function ProductionView({
                   )}
                 </div>
 
-                <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">{row.cs_exact}</p>
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+                  {row.cs_exact}
+                </p>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
                   <span>HTTP: {job?.http_status ?? '—'}</span>
@@ -343,6 +569,15 @@ export function ProductionView({
                     <>
                       <span aria-hidden="true">·</span>
                       <span>{(job.file_size / 1024).toFixed(1)} KB</span>
+                    </>
+                  )}
+                  {(naturalJob || slowJob) && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Хувилбар: {naturalJob ? 'Natural✓' : 'Natural—'} /{' '}
+                        {slowJob ? 'Slow✓' : 'Slow—'}
+                      </span>
                     </>
                   )}
                 </div>
@@ -374,7 +609,7 @@ export function ProductionView({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onGoToQa(row.source_id)}
+                      onClick={() => onGoToQa(row.source_id, selectedSpeechStyle)}
                       className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                     >
                       <Headphones className="w-4 h-4" aria-hidden="true" />
@@ -398,12 +633,15 @@ export function ProductionView({
         >
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
-              <h2 id="batch-confirm-title" className="text-lg font-bold text-slate-900 dark:text-slate-50">
+              <h2
+                id="batch-confirm-title"
+                className="text-lg font-bold text-slate-900 dark:text-slate-50"
+              >
                 {mode === 'mock'
-                  ? 'Тестийн (MOCK) 5 WAV үүсгэх баталгаажуулалт'
+                  ? `Тестийн (MOCK) · ${activeStyleDef.short_label} багц`
                   : isFirstRealGateActive
-                  ? 'Эхний 1 бодит WAV (PH001 — Dobrý den.) баталгаажуулах'
-                  : 'Үлдсэн бодит Vertex AI TTS дуудлага баталгаажуулах'}
+                  ? `PH001 — Dobrý den. (${activeStyleDef.short_label}) баталгаажуулах`
+                  : `Үлдсэн бодит Vertex AI TTS (${activeStyleDef.short_label})`}
               </h2>
               <button
                 type="button"
@@ -415,29 +653,39 @@ export function ProductionView({
               </button>
             </div>
 
-            {mode === 'vertex' && !runtime.vertex_connected ? (
+            {mode === 'vertex' && (!runtime.vertex_connected || runtime.storage_backend !== 'gcs-private-bucket') ? (
               <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-start gap-3">
-                <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+                <ShieldAlert
+                  className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
                 <div className="text-xs md:text-sm text-amber-950 dark:text-amber-200 space-y-1.5">
-                  <p className="font-semibold">Vertex AI: ТОХИРУУЛААГҮЙ (ADC / IAM эрх баталгаажаагүй)</p>
+                  <p className="font-semibold">
+                    Vertex AI эсвэл бат бөх GCS хадгалалт баталгаажаагүй
+                  </p>
                   <p>
                     {runtime.adc_error ??
-                      'Одоогийн орчинд project-a699c3ff-995a-4b88-add төслийн service account болон aiplatform.endpoints.predict эрх баталгаажаагүй тул бодит хүсэлт илгээхгүй.'}
+                      runtime.gcs_error ??
+                      'Одоогийн орчинд project-a699c3ff-995a-4b88-add төслийн service account болон GCS_BUCKET_NAME эрх баталгаажаагүй тул төлбөртэй хүсэлт илгээхгүй.'}
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1 font-mono">
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1.5 font-mono">
                   <p>
-                    Мөрийн тоо: {effectiveRowsToRun.length} · Хоолой: {selectedVoice} · Хурд: Normal
+                    Мөрийн тоо: {effectiveRowsToRun.length} · Хоолой: {selectedVoice} · Хэв маяг:{' '}
+                    {activeStyleDef.short_label} ({activeStyleDef.style_version})
+                  </p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words">
+                    speechMetadata.style: &quot;{activeStyleDef.style_prompt}&quot;
                   </p>
                   <p>
                     Горим:{' '}
                     {mode === 'mock'
                       ? 'Тестийн горим (Төлбөргүй синтетик MOCK WAV, бодит санд нөлөөлөхгүй)'
                       : isFirstRealGateActive
-                      ? `Бодит Vertex AI (${runtime.project_id}) — эхлээд зөвхөн PH001 (1 дуудлага)`
+                      ? `Бодит Vertex AI (${runtime.project_id}) — зөвхөн PH001 (1 дуудлага)`
                       : `Бодит Vertex AI (${runtime.project_id}) — PH001 баталгаажсан тул үлдсэн мөрүүд`}
                   </p>
                 </div>
@@ -447,7 +695,8 @@ export function ProductionView({
                     <div className="flex items-start gap-2.5 text-red-900 dark:text-red-200 text-xs">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                       <p>
-                        <strong>PH006 (Můžete to prosím zopakovat?)</strong> нь <span className="font-mono">BLOCK_DOMAIN</span> тугтай. Нийтлэлд гаргахгүй, зөвхөн дотоод инженерийн туршилтад ашиглана.
+                        <strong>PH006 (Můžete to prosím zopakovat?)</strong> нь{' '}
+                        <span className="font-mono">BLOCK_DOMAIN</span> тугтай. Нийтлэлд гаргахгүй, зөвхөн дотоод инженерийн туршилтад ашиглана.
                       </p>
                     </div>
                     <label className="flex items-start gap-2.5 text-xs text-slate-900 dark:text-slate-100 cursor-pointer">
@@ -474,14 +723,19 @@ export function ProductionView({
               >
                 Хаах
               </button>
-              {!(mode === 'vertex' && !runtime.vertex_connected) && (
+              {!(
+                mode === 'vertex' &&
+                (!runtime.vertex_connected || runtime.storage_backend !== 'gcs-private-bucket')
+              ) && (
                 <button
                   type="button"
                   disabled={hasHoldFlag && !ackPrivateTest}
                   onClick={() => onRunBatch(ackPrivateTest, isFirstRealGateActive)}
                   className="min-h-[44px] px-5 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-40 text-white text-sm font-semibold cursor-pointer"
                 >
-                  {isFirstRealGateActive ? 'PH001 (1 WAV) эхлүүлэх' : 'Багцыг эхлүүлэх'}
+                  {isFirstRealGateActive
+                    ? `PH001 · ${activeStyleDef.short_label} эхлүүлэх`
+                    : 'Багцыг эхлүүлэх'}
                 </button>
               )}
             </div>

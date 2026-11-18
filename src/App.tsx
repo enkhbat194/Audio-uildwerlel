@@ -30,6 +30,7 @@ import type {
   QaRecord,
   QaStatus,
   SourceRow,
+  SpeechStyle,
 } from './shared/types';
 
 export default function App() {
@@ -47,7 +48,9 @@ export default function App() {
 
   const [mode, setMode] = useState<ExecutionMode>('vertex');
   const [selectedVoice, setSelectedVoice] = useState<string>(VERTEX_VOICE);
+  const [selectedSpeechStyle, setSelectedSpeechStyle] = useState<SpeechStyle>('natural');
   const [selectedQaSourceId, setSelectedQaSourceId] = useState<string>('CZ-A0-M01-L01-PH001');
+  const [selectedQaStyle, setSelectedQaStyle] = useState<SpeechStyle>('natural');
   const [isDark, setIsDark] = useState<boolean>(false);
   const [isRefreshingRuntime, setIsRefreshingRuntime] = useState<boolean>(false);
 
@@ -229,7 +232,7 @@ export default function App() {
           body: JSON.stringify({
             sourceId: row.source_id,
             voice: selectedVoice,
-            speedProfile: 'normal',
+            speechStyle: selectedSpeechStyle,
             mode,
             acknowledgePrivateTest: ackPrivateTest,
           }),
@@ -255,6 +258,38 @@ export default function App() {
     setIsBatchRunning(false);
   }
 
+  async function handleGeneratePh001Variant(style: SpeechStyle) {
+    if (!state || isBatchRunning) return;
+    setSelectedSpeechStyle(style);
+    setIsBatchRunning(true);
+    setIsBatchPaused(false);
+    setActiveRowId('CZ-A0-M01-L01-PH001');
+
+    try {
+      const res = await authedFetch('/api/tts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: 'CZ-A0-M01-L01-PH001',
+          voice: selectedVoice,
+          speechStyle: style,
+          mode,
+          acknowledgePrivateTest: true,
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as { job?: AudioJobReceipt } | null;
+      if (payload?.job && ownerUser) {
+        void persistJobToFirestore(payload.job).catch(() => undefined);
+      }
+    } catch {
+      // Refresh state to expose error
+    } finally {
+      await fetchState(false);
+      setActiveRowId(null);
+      setIsBatchRunning(false);
+    }
+  }
+
   function handlePauseBatch() {
     pauseRequestedRef.current = true;
     setIsBatchPaused(true);
@@ -270,7 +305,13 @@ export default function App() {
 
   async function handleSaveQa(
     sourceId: string,
-    payload: { listening_qa: QaStatus; issue_category: string; notes: string }
+    payload: {
+      listening_qa: QaStatus;
+      issue_category: string;
+      notes: string;
+      speechStyle?: SpeechStyle;
+      qaKey?: string;
+    }
   ) {
     const res = await authedFetch(`/api/qa/${encodeURIComponent(sourceId)}`, {
       method: 'POST',
@@ -433,10 +474,13 @@ export default function App() {
                 sources={state.sources}
                 realJobs={state.real_jobs}
                 mockJobs={state.mock_jobs}
+                qa={state.qa}
                 mode={mode}
                 runtime={state.runtime}
                 selectedVoice={selectedVoice}
                 onChangeVoice={setSelectedVoice}
+                selectedSpeechStyle={selectedSpeechStyle}
+                onChangeSpeechStyle={setSelectedSpeechStyle}
                 isBatchRunning={isBatchRunning}
                 isBatchPaused={isBatchPaused}
                 activeRowId={activeRowId}
@@ -444,10 +488,12 @@ export default function App() {
                 onOpenConfirmModal={() => setConfirmModalOpen(true)}
                 onCloseConfirmModal={() => setConfirmModalOpen(false)}
                 onRunBatch={handleRunBatch}
+                onGeneratePh001Variant={handleGeneratePh001Variant}
                 onPauseBatch={handlePauseBatch}
                 onResetMock={handleResetMock}
-                onGoToQa={(id) => {
+                onGoToQa={(id, style) => {
                   setSelectedQaSourceId(id);
+                  if (style) setSelectedQaStyle(style);
                   setActiveTab('qa');
                 }}
               />
@@ -462,6 +508,8 @@ export default function App() {
                 qa={state.qa}
                 selectedSourceId={selectedQaSourceId}
                 onSelectSourceId={setSelectedQaSourceId}
+                selectedStyle={selectedQaStyle}
+                onSelectStyle={setSelectedQaStyle}
                 onSaveQa={handleSaveQa}
               />
             )}

@@ -6,6 +6,7 @@ import {
   CANONICAL_CURRICULUM_SHA256,
   CANONICAL_DATASET_VERSION,
   SEED_FIRST_FIVE_ROWS,
+  getJobReceiptKey,
 } from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
@@ -288,16 +289,26 @@ export async function syncSnapshotToFirestoreAdc(
         })
       ),
       ...Object.values(store.real_jobs).map((job) =>
-        patchFirestoreDoc(baseUrl, token, `real_jobs/${encodeURIComponent(job.source_id)}`, {
-          ...job,
-          ownerUid,
-        })
+        patchFirestoreDoc(
+          baseUrl,
+          token,
+          `real_jobs/${encodeURIComponent(getJobReceiptKey(job))}`,
+          {
+            ...job,
+            ownerUid,
+          }
+        )
       ),
-      ...Object.values(store.qa).map((qa) =>
-        patchFirestoreDoc(baseUrl, token, `qa_records/${encodeURIComponent(qa.source_id)}`, {
-          ...qa,
-          ownerUid,
-        })
+      ...Object.entries(store.qa).map(([key, qa]) =>
+        patchFirestoreDoc(
+          baseUrl,
+          token,
+          `qa_records/${encodeURIComponent(qa.qa_key ?? key)}`,
+          {
+            ...qa,
+            ownerUid,
+          }
+        )
       ),
     ]);
 

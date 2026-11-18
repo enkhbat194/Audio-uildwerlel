@@ -1,5 +1,5 @@
 import { doc, setDoc } from 'firebase/firestore';
-import { CANONICAL_CURRICULUM_SHA256 } from '../shared/sourceRegistry';
+import { CANONICAL_CURRICULUM_SHA256, getJobReceiptKey } from '../shared/sourceRegistry';
 import type { AudioJobReceipt, QaRecord, SourceRow } from '../shared/types';
 import { OperationType, auth, db, handleFirestoreError } from './firebaseClient';
 
@@ -45,9 +45,10 @@ export async function persistJobToFirestore(job: AudioJobReceipt): Promise<void>
   const uid = auth.currentUser?.uid;
   if (!uid) return;
   const collectionName = job.is_mock ? 'mock_jobs' : 'real_jobs';
-  const path = `${collectionName}/${job.source_id}`;
+  const docId = getJobReceiptKey(job);
+  const path = `${collectionName}/${docId}`;
   try {
-    await setDoc(doc(db, collectionName, job.source_id), {
+    await setDoc(doc(db, collectionName, docId), {
       ...job,
       ownerUid: uid,
     });
@@ -59,9 +60,10 @@ export async function persistJobToFirestore(job: AudioJobReceipt): Promise<void>
 export async function persistQaToFirestore(qa: QaRecord): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid) return;
-  const path = `qa_records/${qa.source_id}`;
+  const docId = qa.qa_key ?? qa.source_id;
+  const path = `qa_records/${docId}`;
   try {
-    await setDoc(doc(db, 'qa_records', qa.source_id), {
+    await setDoc(doc(db, 'qa_records', docId), {
       ...qa,
       ownerUid: uid,
     });

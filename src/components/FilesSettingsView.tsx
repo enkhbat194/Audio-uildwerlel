@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   CheckCircle2,
   Cloud,
   Download,
@@ -19,8 +20,14 @@ import {
   type DriveFileItem,
   type DriveUploadedReceipt,
 } from '../lib/driveClient';
-import type { AppStateSnapshot } from '../shared/types';
-import { JobStatusLabel } from './StatusBadge';
+import {
+  SPEECH_STYLE_PROFILES,
+  getJobReceiptKey,
+  getQaForJob,
+  isJobDriveEligible,
+} from '../shared/sourceRegistry';
+import type { AppStateSnapshot, AudioJobReceipt } from '../shared/types';
+import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
 
 interface FilesSettingsViewProps {
   state: AppStateSnapshot;
@@ -30,6 +37,12 @@ interface FilesSettingsViewProps {
   onRecordDriveSync: (uploadedFiles: DriveUploadedReceipt[]) => Promise<void>;
 }
 
+function getStyleTag(job: AudioJobReceipt): string {
+  if (!job.speech_style) return 'Legacy';
+  const def = SPEECH_STYLE_PROFILES[job.speech_style];
+  return `${def?.short_label ?? job.speech_style} (${job.style_version ?? 'v1'})`;
+}
+
 export function FilesSettingsView({
   state,
   driveAccessToken,
@@ -37,21 +50,30 @@ export function FilesSettingsView({
   onSelectDriveFolder,
   onRecordDriveSync,
 }: FilesSettingsViewProps) {
-  const { sources, real_jobs, mock_jobs, drive, runtime, events, errors } = state;
+  const { sources, real_jobs, mock_jobs, qa, drive, runtime, events, errors } = state;
+  const sourceById = new Map(sources.map((s) => [s.source_id, s]));
 
-  const realDownloadable = sources
-    .map((row) => ({ row, job: real_jobs[row.source_id] }))
-    .filter(
-      (item): item is { row: (typeof sources)[number]; job: NonNullable<(typeof real_jobs)[string]> } =>
-        Boolean(item.job && item.job.status === 'REAL_SUCCESS' && !item.job.is_mock)
-    );
+  const realDownloadable = Object.values(real_jobs)
+    .filter((job) => job.status === 'REAL_SUCCESS' && !job.is_mock)
+    .map((job) => ({
+      key: getJobReceiptKey(job),
+      row: sourceById.get(job.source_id),
+      job,
+      qaRec: getQaForJob(qa, job),
+      driveEligible: isJobDriveEligible(job, qa),
+    }));
 
-  const mockDownloadable = sources
-    .map((row) => ({ row, job: mock_jobs[row.source_id] }))
-    .filter(
-      (item): item is { row: (typeof sources)[number]; job: NonNullable<(typeof mock_jobs)[string]> } =>
-        Boolean(item.job && item.job.status === 'MOCK' && item.job.is_mock)
-    );
+  const driveEligibleReal = realDownloadable.filter((item) => item.driveEligible);
+  const driveBlockedReal = realDownloadable.filter((item) => !item.driveEligible);
+
+  const mockDownloadable = Object.values(mock_jobs)
+    .filter((job) => job.status === 'MOCK' && job.is_mock)
+    .map((job) => ({
+      key: getJobReceiptKey(job),
+      row: sourceById.get(job.source_id),
+      job,
+      qaRec: getQaForJob(qa, job),
+    }));
 
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -131,9 +153,9 @@ export function FilesSettingsView({
     const uploaded: DriveUploadedReceipt[] = [];
 
     try {
-      // 1. Upload real WAVs
-      for (const { job } of realDownloadable) {
-        setDriveProgressText(`Бодит WAV хуулж байна: ${job.filename}`);
+      // 1. Upload ONLY PASS-approved real WAVs (never REVIEW / FAIL / QA_PENDING)
+      for (const { job } of driveEligibleReal) {
+        setDriveProgressText(`PASS баталгаажсан WAV хуулж байна: ${job.filename}`);
         const res = await authedFetch(`/api/audio/real/${encodeURIComponent(job.filename)}`);
         if (!res.ok) throw new Error(`WAV татах алдаа: ${job.filename} (HTTP ${res.status})`);
         const bytes = new Uint8Array(await res.arrayBuffer());
@@ -203,7 +225,7 @@ export function FilesSettingsView({
           Файлууд / Тохиргоо
         </h1>
         <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-          Баталгаажсан таталт (WAV + manifests), Google Cloud Storage, Firestore болон бодит Google Drive синк.
+          Баталгаажсан таталт (WAV + manifests), Google Cloud Storage, Firestore болон QA-PASS шүүлтүүртэй Google Drive синк.
         </p>
       </div>
 
@@ -215,7 +237,7 @@ export function FilesSettingsView({
               Татаж авах (WAV болон Manifests)
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Бодит (`wav/real`) болон MOCK (`wav/mock`) замууд тусдаа хадгалагдана. Хоосон загвар файл үүсгэхгүй.
+              Natural, Learning Slow болон анхны PH001 файл бүр тусдаа замтай хадгалагдана. MOCK сан бодит сантай холилдохгүй.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -288,17 +310,20 @@ export function FilesSettingsView({
               </p>
             ) : (
               <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl">
-                {realDownloadable.map(({ row, job }) => (
-                  <div key={row.source_id} className="p-3 flex items-center justify-between gap-3">
+                {realDownloadable.map(({ key, row, job, qaRec }) => (
+                  <div key={key} className="p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-xs font-mono">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                         <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {job.filename}
                         </span>
+                        <span className="text-sky-700 dark:text-sky-400">{getStyleTag(job)}</span>
                         <JobStatusLabel status={job.status} />
+                        <QaStatusLabel status={qaRec?.listening_qa ?? 'QA_PENDING'} />
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                        {row.cs_exact} · {job.duration_ms} ms
+                        {row?.cs_exact ?? job.source_id} · {job.duration_ms} ms ·{' '}
+                        {job.gcs_object_path ?? job.storage_ref}
                       </p>
                     </div>
                     <button
@@ -330,17 +355,21 @@ export function FilesSettingsView({
               </p>
             ) : (
               <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-amber-200 dark:border-amber-900/60 rounded-xl">
-                {mockDownloadable.map(({ row, job }) => (
-                  <div key={row.source_id} className="p-3 flex items-center justify-between gap-3">
+                {mockDownloadable.map(({ key, row, job, qaRec }) => (
+                  <div key={key} className="p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-xs font-mono">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                         <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {job.filename}
                         </span>
+                        <span className="text-amber-700 dark:text-amber-400">
+                          {getStyleTag(job)}
+                        </span>
                         <JobStatusLabel status={job.status} />
+                        <QaStatusLabel status={qaRec?.listening_qa ?? 'QA_PENDING'} />
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                        {row.cs_exact} · {job.duration_ms} ms
+                        {row?.cs_exact ?? job.source_id} · {job.duration_ms} ms
                       </p>
                     </div>
                     <button
@@ -371,7 +400,9 @@ export function FilesSettingsView({
             Google Cloud Storage &amp; Firestore
           </h2>
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            {runtime.storage_backend === 'gcs-private-bucket' && runtime.gcs_bucket && runtime.gcs_permission_verified
+            {runtime.storage_backend === 'gcs-private-bucket' &&
+            runtime.gcs_bucket &&
+            runtime.gcs_permission_verified
               ? `GCS Bucket: gs://${runtime.gcs_bucket} (IAM OK)`
               : runtime.gcs_bucket
               ? `GCS Bucket: gs://${runtime.gcs_bucket} (Эрх баталгаажаагүй)`
@@ -384,7 +415,9 @@ export function FilesSettingsView({
             Firestore DB: {runtime.firestore_database_id}
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Cloud Run дээр <span className="font-mono">GCS_BUCKET_NAME</span> болон <span className="font-mono">storage.objects.create/get</span> эрх баталгаажаагүй бол төлбөртэй Vertex TTS дуудлага эхлүүлэхийг сервер автоматаар хориглоно (<span className="font-mono">EPHEMERAL_STORAGE_BLOCKED</span>).
+            Cloud Run дээр <span className="font-mono">GCS_BUCKET_NAME</span> болон{' '}
+            <span className="font-mono">storage.objects.create/get</span> эрх баталгаажаагүй бол төлбөртэй Vertex TTS дуудлага эхлүүлэхийг сервер автоматаар хориглоно (
+            <span className="font-mono">EPHEMERAL_STORAGE_BLOCKED</span>).
           </p>
         </div>
 
@@ -392,7 +425,7 @@ export function FilesSettingsView({
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
-              Google Drive синк (Бодит OAuth)
+              Google Drive синк (Бодит OAuth · QA PASS шүүлтүүр)
             </h2>
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
@@ -404,6 +437,20 @@ export function FilesSettingsView({
               <Cloud className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{driveAccessToken ? 'OAuth идэвхтэй' : 'Эрх сэргээх шаардлагатай'}</span>
             </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-950 dark:text-amber-200 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" aria-hidden="true" />
+            <div>
+              <p className="font-semibold">
+                Drive руу синк хийх боломжтой PASS бодит WAV: {driveEligibleReal.length} файл
+              </p>
+              {driveBlockedReal.length > 0 && (
+                <p className="mt-0.5">
+                  REVIEW / FAIL / QA_PENDING төлөвтэй {driveBlockedReal.length} бодит WAV файлыг аппад ашиглах аудио гэж Drive руу хуулахгүй.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
@@ -496,7 +543,7 @@ export function FilesSettingsView({
                   <UploadCloud className="w-4 h-4" aria-hidden="true" />
                   <span>
                     {drive.folder_id
-                      ? `Сонгосон хавтас руу WAV + Manifest хуулах`
+                      ? `PASS WAV (${driveEligibleReal.length}) + Manifest хуулах`
                       : 'Эхлээд Drive хавтас сонгоно уу'}
                   </span>
                 </button>
@@ -526,7 +573,10 @@ export function FilesSettingsView({
       {/* Vertex AI Runtime & GUI Setup Guide */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-sky-700 dark:text-sky-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <ShieldAlert
+            className="w-5 h-5 text-sky-700 dark:text-sky-400 shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
           <div className="space-y-1">
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
               Vertex AI, IAP ба Cloud Run тохиргоо (Нууц түлхүүр хадгалахгүй)
@@ -540,7 +590,9 @@ export function FilesSettingsView({
         <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-2 border-t border-slate-200 dark:border-slate-800">
           <div>
             <dt className="text-slate-500 dark:text-slate-400">GCP Project ID</dt>
-            <dd className="font-mono text-slate-900 dark:text-slate-100 mt-0.5">{runtime.project_id}</dd>
+            <dd className="font-mono text-slate-900 dark:text-slate-100 mt-0.5">
+              {runtime.project_id}
+            </dd>
           </div>
           <div>
             <dt className="text-slate-500 dark:text-slate-400">Model / Voice / Region</dt>
@@ -581,13 +633,20 @@ export function FilesSettingsView({
           </p>
           <ol className="list-decimal list-inside space-y-1">
             <li>
-              <strong>IAM &amp; Admin → Service Accounts</strong> (<span className="font-mono">project-a699c3ff-995a-4b88-add</span>): Тусгай service account үүсгэж, <span className="font-mono">roles/aiplatform.user</span>, <span className="font-mono">roles/storage.objectAdmin</span> (зөвхөн хувийн bucket дээр), <span className="font-mono">roles/datastore.user</span> эрх олгоно (JSON key татахгүй).
+              <strong>IAM &amp; Admin → Service Accounts</strong> (
+              <span className="font-mono">project-a699c3ff-995a-4b88-add</span>): Тусгай service account үүсгэж,{' '}
+              <span className="font-mono">roles/aiplatform.user</span>,{' '}
+              <span className="font-mono">roles/storage.objectAdmin</span> (зөвхөн хувийн bucket дээр),{' '}
+              <span className="font-mono">roles/datastore.user</span> эрх олгоно (JSON key татахгүй).
             </li>
             <li>
-              <strong>Cloud Storage → Buckets</strong>: Хувийн bucket үүсгэж Public access prevention асаана; Cloud Run дээр <span className="font-mono">GCS_BUCKET_NAME</span> хувьсагчийг заана.
+              <strong>Cloud Storage → Buckets</strong>: Хувийн bucket үүсгэж Public access prevention асаана; Cloud Run дээр{' '}
+              <span className="font-mono">GCS_BUCKET_NAME</span> хувьсагчийг заана.
             </li>
             <li>
-              <strong>Cloud Run → Security / Networking</strong>: IAP (Identity-Aware Proxy) идэвхжүүлж <span className="font-mono">IAP_AUDIENCE</span>, <span className="font-mono">OWNER_EMAIL_ALLOWLIST=zazadada8899@gmail.com</span> хувьсагчдыг тохируулна.
+              <strong>Cloud Run → Security / Networking</strong>: IAP (Identity-Aware Proxy) идэвхжүүлж{' '}
+              <span className="font-mono">IAP_AUDIENCE</span>,{' '}
+              <span className="font-mono">OWNER_EMAIL_ALLOWLIST=zazadada8899@gmail.com</span> хувьсагчдыг тохируулна.
             </li>
           </ol>
         </div>
@@ -601,12 +660,16 @@ export function FilesSettingsView({
           </h2>
           <div className="max-h-64 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-800 text-xs">
             {events.length === 0 ? (
-              <p className="py-4 text-slate-500 dark:text-slate-400">Одоогоор үйл явдал бүртгэгдээгүй.</p>
+              <p className="py-4 text-slate-500 dark:text-slate-400">
+                Одоогоор үйл явдал бүртгэгдээгүй.
+              </p>
             ) : (
               events.slice(0, 20).map((ev) => (
                 <div key={ev.id} className="py-2.5 space-y-0.5">
                   <div className="flex items-center justify-between gap-2 font-mono text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{ev.event_type}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {ev.event_type}
+                    </span>
                     <span>{ev.source_id}</span>
                   </div>
                   <p className="text-slate-700 dark:text-slate-300">{ev.detail}</p>
@@ -627,7 +690,9 @@ export function FilesSettingsView({
               errors.slice(0, 20).map((err) => (
                 <div key={err.id} className="py-2.5 space-y-0.5">
                   <div className="flex items-center justify-between gap-2 font-mono text-red-700 dark:text-red-400">
-                    <span>{err.code} (HTTP {err.http_status ?? '—'})</span>
+                    <span>
+                      {err.code} (HTTP {err.http_status ?? '—'})
+                    </span>
                     <span>{err.source_id}</span>
                   </div>
                   <p className="text-slate-700 dark:text-slate-300">{err.message}</p>
@@ -659,7 +724,10 @@ export function FilesSettingsView({
               </button>
             </div>
             <div>
-              <label htmlFor="new-drive-folder" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor="new-drive-folder"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 Хавтасны нэр
               </label>
               <input
@@ -691,7 +759,7 @@ export function FilesSettingsView({
         </div>
       )}
 
-      {/* Explicit Confirmation Modal before uploading WAV + Manifests to Google Drive */}
+      {/* Explicit Confirmation Modal before uploading QA-PASS WAV + Manifests to Google Drive */}
       {confirmDriveUploadOpen && (
         <div
           role="dialog"
@@ -715,10 +783,16 @@ export function FilesSettingsView({
 
             <div className="text-xs text-slate-700 dark:text-slate-300 space-y-2">
               <p>
-                Зорилтот хавтас: <strong>{drive.folder_name}</strong> (<span className="font-mono">{drive.folder_id}</span>)
+                Зорилтот хавтас: <strong>{drive.folder_name}</strong> (
+                <span className="font-mono">{drive.folder_id}</span>)
               </p>
               <ul className="list-disc list-inside space-y-1 font-mono bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                <li>Бодит WAV: {realDownloadable.length} файл</li>
+                <li>QA PASS баталгаажсан бодит WAV: {driveEligibleReal.length} файл</li>
+                {driveBlockedReal.length > 0 && (
+                  <li className="text-red-700 dark:text-red-400">
+                    Хасагдсан (REVIEW / FAIL / QA_PENDING): {driveBlockedReal.length} файл
+                  </li>
+                )}
                 {includeMockInDriveSync && <li>MOCK_ WAV: {mockDownloadable.length} файл</li>}
                 {plannedDriveManifests.map((m) => (
                   <li key={m.kind}>{m.name}</li>
@@ -727,7 +801,9 @@ export function FilesSettingsView({
             </div>
 
             {driveProgressText && (
-              <p className="text-xs font-mono text-sky-700 dark:text-sky-400">{driveProgressText}</p>
+              <p className="text-xs font-mono text-sky-700 dark:text-sky-400">
+                {driveProgressText}
+              </p>
             )}
 
             <div className="flex justify-end gap-2">

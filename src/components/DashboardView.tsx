@@ -1,4 +1,10 @@
 import { AlertTriangle, ArrowRight, Play, ShieldAlert, Volume2 } from 'lucide-react';
+import {
+  SPEECH_STYLE_PROFILES,
+  getJobsForSource,
+  getQaForJob,
+  getVariantKey,
+} from '../shared/sourceRegistry';
 import type { AppStateSnapshot, ExecutionMode } from '../shared/types';
 import type { NavTabId } from './AppHeader';
 import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
@@ -21,21 +27,24 @@ export function DashboardView({
   const { sources, real_jobs, mock_jobs, qa, runtime } = state;
   const totalCount = sources.length;
 
-  const realList = sources.map((s) => real_jobs[s.source_id]).filter(Boolean);
-  const mockList = sources.map((s) => mock_jobs[s.source_id]).filter(Boolean);
+  const realList = Object.values(real_jobs);
+  const mockList = Object.values(mock_jobs);
 
   const realSuccessCount = realList.filter((j) => j.status === 'REAL_SUCCESS' && !j.is_mock).length;
   const mockCount = mockList.filter((j) => j.status === 'MOCK' && j.is_mock).length;
   const failedCount = realList.filter(
     (j) => j.status === 'FAILED' || j.status === 'AMBIGUOUS_RETRY_REVIEW'
   ).length;
-  const pendingCount = Math.max(0, totalCount - realSuccessCount - failedCount);
+  const coveredSourcesCount = new Set(
+    realList.filter((j) => j.status === 'REAL_SUCCESS' && !j.is_mock).map((j) => j.source_id)
+  ).size;
+  const pendingCount = Math.max(0, totalCount - coveredSourcesCount);
 
-  const qaValues = sources.map((s) => qa[s.source_id]?.listening_qa ?? 'QA_PENDING');
-  const qaPass = qaValues.filter((v) => v === 'PASS').length;
-  const qaReview = qaValues.filter((v) => v === 'REVIEW').length;
-  const qaFail = qaValues.filter((v) => v === 'FAIL').length;
-  const qaPending = qaValues.filter((v) => v === 'QA_PENDING').length;
+  const qaValues = Object.values(qa);
+  const qaPass = qaValues.filter((v) => v.listening_qa === 'PASS').length;
+  const qaReview = qaValues.filter((v) => v.listening_qa === 'REVIEW').length;
+  const qaFail = qaValues.filter((v) => v.listening_qa === 'FAIL').length;
+  const qaPending = qaValues.filter((v) => v.listening_qa === 'QA_PENDING').length;
 
   const activeJobMap = mode === 'mock' ? mock_jobs : real_jobs;
 
@@ -51,7 +60,7 @@ export function DashboardView({
               Чех дуудлагын WAV үйлдвэрлэлийн хяналт
             </h1>
             <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-              Эх текстийг өөрчлөхгүйгээр <span className="font-mono text-slate-800 dark:text-slate-100">{runtime.model}</span> ({runtime.voice}) ашиглан эхлээд <span className="font-mono">PH001 — Dobrý den.</span> 1 бодит WAV үүсгэж баталгаажуулаад, дараа нь үлдсэн 4 мөрийг боловсруулна.
+              Эх текстийг өөрчлөхгүйгээр <span className="font-mono text-slate-800 dark:text-slate-100">{runtime.model}</span> ({runtime.voice}) ашиглан эхлээд <span className="font-mono">PH001 — Dobrý den.</span> дээр <strong>Natural</strong> болон <strong>Learning Slow</strong> хувилбарыг тусад нь үүсгэж харьцуулна.
             </p>
           </div>
 
@@ -64,8 +73,8 @@ export function DashboardView({
               <Play className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>
                 {mode === 'vertex' && !runtime.first_real_wav_verified
-                  ? '1 бодит WAV (PH001) үүсгэх'
-                  : '5 аудио үүсгэх'}
+                  ? 'PH001 WAV хувилбар турших'
+                  : 'Үйлдвэрлэл нээх'}
               </span>
             </button>
           </div>
@@ -132,10 +141,12 @@ export function DashboardView({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-2">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Эхний 5 бодит WAV</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Бодит WAV (Хувилбарууд)</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-50 flex items-baseline gap-2">
-            <span>{realSuccessCount} / {totalCount}</span>
-            <span className="text-xs font-sans font-normal text-slate-500 dark:text-slate-400">бодит</span>
+            <span>{realSuccessCount}</span>
+            <span className="text-xs font-sans font-normal text-slate-500 dark:text-slate-400">
+              файл ({coveredSourcesCount}/{totalCount} мөр)
+            </span>
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
             Тусдаа MOCK: {mockCount} · Алдаа: {failedCount} · Хүлээж буй: {pendingCount}
@@ -143,9 +154,9 @@ export function DashboardView({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-2">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Сонсож шалгах (QA)</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Сонсож шалгах (WAV бүрт)</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-50 flex items-baseline gap-2">
-            <span>{qaPass} / {totalCount}</span>
+            <span>{qaPass}</span>
             <span className="text-xs font-sans font-normal text-slate-500 dark:text-slate-400">PASS</span>
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
@@ -173,7 +184,7 @@ export function DashboardView({
               Эхний 5 өгүүлбэрийн төлөв ({mode === 'mock' ? 'MOCK харагдац' : 'Бодит харагдац'})
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Бодит горимд эхлээд PH001 (Dobrý den.) 1 WAV үүсгэж шалгасны дараа л үлдсэн 4 мөрийг зөвшөөрнө.
+              Эхлээд PH001 (Dobrý den.) дээр Natural болон Learning Slow хувилбар тусад нь туршина. Бусад 4 мөрийг автоматаар үүсгэхгүй.
             </p>
           </div>
           <button
@@ -188,10 +199,15 @@ export function DashboardView({
 
         <div className="divide-y divide-slate-200 dark:divide-slate-800">
           {sources.map((row) => {
-            const job = activeJobMap[row.source_id];
-            const qaRec = qa[row.source_id];
+            const naturalJob = activeJobMap[getVariantKey(row.source_id, 'natural')];
+            const slowJob = activeJobMap[getVariantKey(row.source_id, 'learning_slow')];
+            const legacyJob = activeJobMap[row.source_id];
+            const rowJobs = getJobsForSource(activeJobMap, row.source_id);
+            const primaryJob = naturalJob ?? slowJob ?? legacyJob ?? rowJobs[0];
+            const primaryQa = primaryJob ? getQaForJob(qa, primaryJob) : qa[row.source_id];
             const jobStatus =
-              job?.status ?? (runtime.vertex_connected || mode === 'mock' ? 'PENDING' : 'NOT_CONNECTED');
+              primaryJob?.status ??
+              (runtime.vertex_connected || mode === 'mock' ? 'PENDING' : 'NOT_CONNECTED');
 
             return (
               <div
@@ -217,13 +233,28 @@ export function DashboardView({
                   <p className="text-base font-semibold text-slate-900 dark:text-slate-50 break-words">
                     {row.cs_exact}
                   </p>
+                  {rowJobs.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      {naturalJob && (
+                        <span>
+                          {SPEECH_STYLE_PROFILES.natural.short_label}: {naturalJob.duration_ms ?? '—'} ms
+                        </span>
+                      )}
+                      {slowJob && (
+                        <span>
+                          · {SPEECH_STYLE_PROFILES.learning_slow.short_label}: {slowJob.duration_ms ?? '—'} ms
+                        </span>
+                      )}
+                      {legacyJob && <span>· Legacy PH001 хадгалагдсан</span>}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 md:gap-6 shrink-0">
                   <JobStatusLabel status={jobStatus} />
-                  <QaStatusLabel status={qaRec?.listening_qa ?? 'QA_PENDING'} />
+                  <QaStatusLabel status={primaryQa?.listening_qa ?? 'QA_PENDING'} />
                   <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 min-w-[72px] text-right">
-                    {job?.duration_ms ? `${job.duration_ms} ms` : '—'}
+                    {primaryJob?.duration_ms ? `${primaryJob.duration_ms} ms` : '—'}
                   </span>
                 </div>
               </div>

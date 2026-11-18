@@ -46,10 +46,11 @@ service cloud.firestore {
 
     function isValidJob(data, expectedMock, expectedProvider) {
       return data.keys().hasAll(['source_id', 'dataset_version', 'cs_exact_sha256', 'fingerprint', 'filename', 'provider', 'model', 'voice', 'speed_profile', 'status', 'is_mock', 'ownerUid', 'created_at', 'updated_at'])
-        && data.keys().hasOnly(['source_id', 'dataset_version', 'cs_exact_sha256', 'fingerprint', 'filename', 'provider', 'model', 'voice', 'speed_profile', 'status', 'is_mock', 'http_status', 'provider_request_id', 'attempts', 'last_error', 'audio_sha256', 'sample_rate', 'channels', 'bit_depth', 'duration_ms', 'file_size', 'peak_dbfs', 'rms_dbfs', 'format', 'storage_ref', 'storage_backend', 'stale', 'ownerUid', 'created_at', 'updated_at'])
+        && data.keys().hasOnly(['receipt_key', 'source_id', 'dataset_version', 'cs_exact_sha256', 'fingerprint', 'filename', 'provider', 'model', 'voice', 'speed_profile', 'speech_style', 'style_version', 'style_prompt', 'status', 'is_mock', 'http_status', 'provider_request_id', 'attempts', 'last_error', 'audio_sha256', 'sample_rate', 'channels', 'bit_depth', 'duration_ms', 'file_size', 'peak_dbfs', 'rms_dbfs', 'format', 'storage_ref', 'gcs_object_path', 'storage_backend', 'stale', 'ownerUid', 'created_at', 'updated_at'])
         && data.ownerUid == request.auth.uid
         && data.is_mock == expectedMock
         && data.provider == expectedProvider
+        && (!('receipt_key' in data) || (data.receipt_key is string && data.receipt_key.size() <= 128))
         && data.source_id is string && data.source_id.size() <= 64
         && data.dataset_version is string && data.dataset_version.size() <= 32
         && data.cs_exact_sha256 is string && data.cs_exact_sha256.size() == 64
@@ -58,6 +59,10 @@ service cloud.firestore {
         && data.model is string && data.model.size() <= 64
         && data.voice is string && data.voice.size() <= 64
         && data.speed_profile in ['normal', 'slow']
+        && (!('speech_style' in data) || data.speech_style in ['natural', 'learning_slow'])
+        && (!('style_version' in data) || (data.style_version is string && data.style_version.size() <= 32))
+        && (!('style_prompt' in data) || (data.style_prompt is string && data.style_prompt.size() <= 512))
+        && (!('gcs_object_path' in data) || data.gcs_object_path == null || (data.gcs_object_path is string && data.gcs_object_path.size() <= 512))
         && data.status is string && data.status.size() <= 32
         && data.created_at is string && data.created_at.size() <= 64
         && data.updated_at is string && data.updated_at.size() <= 64;
@@ -65,9 +70,14 @@ service cloud.firestore {
 
     function isValidQa(data) {
       return data.keys().hasAll(['source_id', 'listening_qa', 'publication_gate', 'ownerUid', 'updated_at'])
-        && data.keys().hasOnly(['source_id', 'listening_qa', 'publication_gate', 'issue_category', 'notes', 'reviewer', 'ownerUid', 'updated_at'])
+        && data.keys().hasOnly(['qa_key', 'source_id', 'speech_style', 'style_version', 'receipt_key', 'audio_sha256', 'listening_qa', 'publication_gate', 'issue_category', 'notes', 'reviewer', 'ownerUid', 'updated_at'])
         && data.ownerUid == request.auth.uid
+        && (!('qa_key' in data) || (data.qa_key is string && data.qa_key.size() <= 128))
         && data.source_id is string && data.source_id.size() <= 64
+        && (!('speech_style' in data) || data.speech_style in ['natural', 'learning_slow'])
+        && (!('style_version' in data) || (data.style_version is string && data.style_version.size() <= 32))
+        && (!('receipt_key' in data) || (data.receipt_key is string && data.receipt_key.size() <= 128))
+        && (!('audio_sha256' in data) || data.audio_sha256 == null || (data.audio_sha256 is string && data.audio_sha256.size() == 64))
         && data.listening_qa in ['QA_PENDING', 'PASS', 'REVIEW', 'FAIL']
         && data.publication_gate in ['BLOCKED_FOR_RELEASE', 'INTERNAL_PILOT_ONLY']
         && (!('issue_category' in data) || (data.issue_category is string && data.issue_category.size() <= 64))

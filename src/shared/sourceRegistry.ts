@@ -6,6 +6,8 @@ import type {
   ImportValidationResult,
   QaRecord,
   SourceRow,
+  SpeechStyle,
+  SpeedProfile,
 } from './types';
 
 export const CANONICAL_CURRICULUM_SHA256 =
@@ -18,6 +20,75 @@ export const VERTEX_MODEL = 'gemini-3.8-flash-tts';
 export const VERTEX_VOICE = 'Achernar';
 export const VERTEX_ENDPOINT =
   'https://aiplatform.googleapis.com/v1/projects/project-a699c3ff-995a-4b88-add/locations/global/publishers/google/models/gemini-3.8-flash-tts:generateContent';
+
+export interface SpeechStyleDefinition {
+  id: SpeechStyle;
+  style_version: string;
+  speed_profile: SpeedProfile;
+  label_mn: string;
+  short_label: string;
+  description_mn: string;
+  style_prompt: string;
+}
+
+export const SPEECH_STYLE_PROFILES: Record<SpeechStyle, SpeechStyleDefinition> = {
+  natural: {
+    id: 'natural',
+    style_version: 'v1',
+    speed_profile: 'normal',
+    label_mn: 'Natural (Байгалийн яриа)',
+    short_label: 'Natural',
+    description_mn: 'Өдөр тутмын уугуул чех харилцан ярианы дулаан, амьд өнгө аяс ба байгалийн хэмнэл.',
+    style_prompt:
+      'Warm, relaxed, authentic conversational Czech. Human-like intonation, natural rhythm, unhurried delivery, clear but not exaggerated articulation.',
+  },
+  learning_slow: {
+    id: 'learning_slow',
+    style_version: 'v1',
+    speed_profile: 'slow',
+    label_mn: 'Learning Slow (Суралцагчид)',
+    short_label: 'Learning Slow',
+    description_mn: 'Анхан шатны насанд хүрсэн суралцагчид зориулсан тайван, эгшгийн урт богино тод хэмнэл.',
+    style_prompt:
+      'Calm, clearly articulated Czech for an adult beginner. Moderately slower than natural speech, smooth connected pronunciation, natural vowel lengths, no robotic pauses.',
+  },
+};
+
+export function getVariantKey(sourceId: string, speechStyle: SpeechStyle): string {
+  return `${sourceId}__${speechStyle}`;
+}
+
+export function getJobReceiptKey(job: Pick<AudioJobReceipt, 'source_id' | 'speech_style' | 'receipt_key'>): string {
+  if (job.receipt_key) return job.receipt_key;
+  if (job.speech_style) return getVariantKey(job.source_id, job.speech_style);
+  return job.source_id;
+}
+
+export function getJobsForSource(
+  jobs: Record<string, AudioJobReceipt>,
+  sourceId: string
+): AudioJobReceipt[] {
+  return Object.values(jobs).filter((j) => j.source_id === sourceId);
+}
+
+export function getQaForJob(
+  qaMap: Record<string, QaRecord>,
+  job: Pick<AudioJobReceipt, 'source_id' | 'speech_style' | 'receipt_key'>
+): QaRecord | undefined {
+  const key = getJobReceiptKey(job);
+  if (qaMap[key]) return qaMap[key];
+  if (!job.speech_style) return qaMap[job.source_id];
+  return undefined;
+}
+
+export function isJobDriveEligible(
+  job: AudioJobReceipt,
+  qaMap: Record<string, QaRecord>
+): boolean {
+  if (job.is_mock || job.status !== 'REAL_SUCCESS') return false;
+  const qaRec = getQaForJob(qaMap, job);
+  return qaRec?.listening_qa === 'PASS';
+}
 
 export const SEED_FIRST_FIVE_ROWS: SourceRow[] = [
   {
@@ -361,12 +432,16 @@ export function generateManifestCsv(
 ): string {
   const header = [
     'content_id',
+    'receipt_key',
     'dataset_version',
     'cs_exact_sha256',
     'provider',
     'model',
     'voice',
+    'speech_style',
+    'style_version',
     'speed_profile',
+    'fingerprint',
     'audio_sha256',
     'duration_ms',
     'format',
@@ -377,32 +452,40 @@ export function generateManifestCsv(
 
   const lines = [header.join(',')];
   for (const row of sources) {
-    const job = jobs[row.source_id];
-    const qa = qaMap[row.source_id];
-    const publicationGate =
-      row.source_gate === 'BLOCK_DOMAIN' || !row.publish_allowed
-        ? 'BLOCKED_FOR_RELEASE'
-        : qa?.publication_gate ?? 'BLOCKED_FOR_RELEASE';
+    const rowJobs = getJobsForSource(jobs, row.source_id);
+    const itemsToEmit: Array<AudioJobReceipt | null> = rowJobs.length > 0 ? rowJobs : [null];
 
-    lines.push(
-      [
-        row.source_id,
-        row.dataset_version,
-        row.text_sha256,
-        job?.provider ?? '',
-        job?.model ?? VERTEX_MODEL,
-        job?.voice ?? VERTEX_VOICE,
-        job?.speed_profile ?? 'normal',
-        job?.audio_sha256 ?? '',
-        job?.duration_ms ?? '',
-        job?.format ?? '',
-        job?.storage_ref ?? '',
-        qa?.listening_qa ?? 'QA_PENDING',
-        publicationGate,
-      ]
-        .map(escapeCsvCell)
-        .join(',')
-    );
+    for (const job of itemsToEmit) {
+      const qa = job ? getQaForJob(qaMap, job) : qaMap[row.source_id];
+      const publicationGate =
+        row.source_gate === 'BLOCK_DOMAIN' || !row.publish_allowed
+          ? 'BLOCKED_FOR_RELEASE'
+          : qa?.publication_gate ?? 'BLOCKED_FOR_RELEASE';
+
+      lines.push(
+        [
+          row.source_id,
+          job ? getJobReceiptKey(job) : row.source_id,
+          row.dataset_version,
+          row.text_sha256,
+          job?.provider ?? '',
+          job?.model ?? VERTEX_MODEL,
+          job?.voice ?? VERTEX_VOICE,
+          job?.speech_style ?? '',
+          job?.style_version ?? '',
+          job?.speed_profile ?? 'normal',
+          job?.fingerprint ?? '',
+          job?.audio_sha256 ?? '',
+          job?.duration_ms ?? '',
+          job?.format ?? '',
+          job?.storage_ref ?? '',
+          qa?.listening_qa ?? 'QA_PENDING',
+          publicationGate,
+        ]
+          .map(escapeCsvCell)
+          .join(',')
+      );
+    }
   }
   return lines.join('\n') + '\n';
 }
@@ -413,6 +496,8 @@ export function generatePronunciationIssuesCsv(
 ): string {
   const header = [
     'content_id',
+    'qa_key',
+    'speech_style',
     'cs_exact',
     'listening_qa',
     'issue_category',
@@ -421,12 +506,17 @@ export function generatePronunciationIssuesCsv(
     'updated_at',
   ];
   const lines = [header.join(',')];
-  for (const row of sources) {
-    const qa = qaMap[row.source_id];
-    if (qa && (qa.listening_qa === 'REVIEW' || qa.listening_qa === 'FAIL' || qa.notes.trim())) {
+  const sourceById = new Map(sources.map((s) => [s.source_id, s]));
+
+  for (const [key, qa] of Object.entries(qaMap)) {
+    const row = sourceById.get(qa.source_id);
+    if (!row) continue;
+    if (qa.listening_qa === 'REVIEW' || qa.listening_qa === 'FAIL' || qa.notes.trim()) {
       lines.push(
         [
           row.source_id,
+          qa.qa_key ?? key,
+          qa.speech_style ?? '',
           row.cs_exact,
           qa.listening_qa,
           qa.issue_category || 'pronunciation_review',
@@ -479,9 +569,10 @@ export function generateSummaryJson(
   const realCount = realList.filter((j) => j.status === 'REAL_SUCCESS' && !j.is_mock).length;
   const mockCount = mockList.filter((j) => j.is_mock && j.status === 'MOCK').length;
   const failedCount = realList.filter((j) => j.status === 'FAILED').length;
-  const qaPass = Object.values(qaMap).filter((q) => q.listening_qa === 'PASS').length;
-  const qaReview = Object.values(qaMap).filter((q) => q.listening_qa === 'REVIEW').length;
-  const qaFail = Object.values(qaMap).filter((q) => q.listening_qa === 'FAIL').length;
+  const qaValues = Object.values(qaMap);
+  const qaPass = qaValues.filter((q) => q.listening_qa === 'PASS').length;
+  const qaReview = qaValues.filter((q) => q.listening_qa === 'REVIEW').length;
+  const qaFail = qaValues.filter((q) => q.listening_qa === 'FAIL').length;
 
   return JSON.stringify(
     {
@@ -496,7 +587,7 @@ export function generateSummaryJson(
         pass: qaPass,
         review: qaReview,
         fail: qaFail,
-        pending: Math.max(0, sources.length - qaPass - qaReview - qaFail),
+        pending: Math.max(0, qaValues.length - qaPass - qaReview - qaFail),
       },
       publication_policy: 'ALL_INTERNAL_PILOT_ONLY_BLOCKED_FOR_RELEASE',
       generated_at: new Date().toISOString(),

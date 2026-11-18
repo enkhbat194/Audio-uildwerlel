@@ -10,6 +10,7 @@ import {
   sha256Utf8,
 } from '../shared/audioAndCrypto';
 import {
+  SPEECH_STYLE_PROFILES,
   VERTEX_MODEL,
   VERTEX_VOICE,
   generateErrorsCsv,
@@ -17,13 +18,16 @@ import {
   generateManifestCsv,
   generatePronunciationIssuesCsv,
   generateSummaryJson,
+  getJobReceiptKey,
+  getQaForJob,
+  getVariantKey,
   parseAndValidateImport,
 } from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
   CloudRuntimeStatus,
   ExecutionMode,
-  SpeedProfile,
+  SpeechStyle,
 } from '../shared/types';
 import { authenticateOwnerRequest, type AuthVerifierDeps } from './auth';
 import {
@@ -36,6 +40,7 @@ import {
   syncSnapshotToFirestoreAdc,
   verifyScopedAudioFile,
   writeScopedAudioFile,
+  type PersistedStore,
 } from './storage';
 import {
   callVertexTtsWithRetry,
@@ -50,8 +55,39 @@ export const FIRST_PILOT_SOURCE_ID = 'CZ-A0-M01-L01-PH001';
 export interface ApiRouterOptions {
   authDeps?: AuthVerifierDeps;
   runtimeProbe?: (forceRefresh?: boolean, firstRealWavVerified?: boolean) => Promise<CloudRuntimeStatus>;
-  ttsCaller?: (exactCzechText: string, voice?: string, maxRetries?: number) => Promise<VertexTtsCallResult>;
+  ttsCaller?: (
+    exactCzechText: string,
+    voice?: string,
+    stylePrompt?: string,
+    maxRetries?: number
+  ) => Promise<VertexTtsCallResult>;
   gcsUploader?: (bucketName: string, objectName: string, bytes: Uint8Array, contentType?: string) => Promise<string>;
+}
+
+function hasVerifiedFirstRealWav(store: PersistedStore): boolean {
+  return Object.values(store.real_jobs).some(
+    (job) =>
+      job.source_id === FIRST_PILOT_SOURCE_ID &&
+      job.status === 'REAL_SUCCESS' &&
+      !job.is_mock &&
+      Boolean(job.audio_sha256)
+  );
+}
+
+function computeJobFingerprint(
+  row: PersistedStore['sources'][number],
+  job: Pick<AudioJobReceipt, 'model' | 'voice' | 'speed_profile' | 'speech_style' | 'style_version'>
+): string {
+  return computeGenerationFingerprint({
+    source_id: row.source_id,
+    dataset_version: row.dataset_version,
+    exact_text_sha256: row.text_sha256,
+    model: job.model,
+    voice: job.voice,
+    speed_profile: job.speed_profile,
+    speech_style: job.speech_style,
+    style_version: job.style_version,
+  });
 }
 
 export function createApiRouter(options: ApiRouterOptions = {}): express.Router {
@@ -119,70 +155,50 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
   router.get('/state', async (_req, res) => {
     const store = loadStore();
-    const firstReal = store.real_jobs[FIRST_PILOT_SOURCE_ID];
-    const firstRealVerified = Boolean(
-      firstReal &&
-        firstReal.status === 'REAL_SUCCESS' &&
-        !firstReal.is_mock &&
-        Boolean(firstReal.audio_sha256)
-    );
+    const firstRealVerified = hasVerifiedFirstRealWav(store);
     const runtime = await probeRuntime(false, firstRealVerified);
+    const sourceById = new Map(store.sources.map((s) => [s.source_id, s]));
 
     let dirty = false;
-    for (const row of store.sources) {
-      // Reconcile REAL jobs
-      const realJob = store.real_jobs[row.source_id];
-      if (realJob) {
-        const fp = computeGenerationFingerprint({
-          source_id: row.source_id,
-          dataset_version: row.dataset_version,
-          exact_text_sha256: row.text_sha256,
-          model: realJob.model,
-          voice: realJob.voice,
-          speed_profile: realJob.speed_profile,
-        });
-        const isStale = realJob.fingerprint !== fp;
-        if (realJob.stale !== isStale) {
-          realJob.stale = isStale;
-          dirty = true;
-        }
-        if (
-          realJob.status === 'REAL_SUCCESS' &&
-          realJob.storage_backend === 'local-preview-ephemeral' &&
-          !verifyScopedAudioFile('real', realJob.filename, realJob.audio_sha256)
-        ) {
-          realJob.status = 'FAILED';
-          realJob.last_error = 'Локал бодит WAV файл олдсонгүй эсвэл SHA256 зөрүүтэй байна.';
-          dirty = true;
-        }
+    for (const realJob of Object.values(store.real_jobs)) {
+      const row = sourceById.get(realJob.source_id);
+      if (!row) continue;
+      const fp = computeJobFingerprint(row, realJob);
+      const isStale = realJob.fingerprint !== fp;
+      if (realJob.stale !== isStale) {
+        realJob.stale = isStale;
+        dirty = true;
       }
-
-      // Reconcile isolated MOCK jobs
-      const mockJob = store.mock_jobs[row.source_id];
-      if (mockJob) {
-        const fp = computeGenerationFingerprint({
-          source_id: row.source_id,
-          dataset_version: row.dataset_version,
-          exact_text_sha256: row.text_sha256,
-          model: mockJob.model,
-          voice: mockJob.voice,
-          speed_profile: mockJob.speed_profile,
-        });
-        const isStale = mockJob.fingerprint !== fp;
-        if (mockJob.stale !== isStale) {
-          mockJob.stale = isStale;
-          dirty = true;
-        }
-        if (
-          mockJob.status === 'MOCK' &&
-          !verifyScopedAudioFile('mock', mockJob.filename, mockJob.audio_sha256)
-        ) {
-          mockJob.status = 'FAILED';
-          mockJob.last_error = 'Локал MOCK WAV файл олдсонгүй.';
-          dirty = true;
-        }
+      if (
+        realJob.status === 'REAL_SUCCESS' &&
+        realJob.storage_backend === 'local-preview-ephemeral' &&
+        !verifyScopedAudioFile('real', realJob.filename, realJob.audio_sha256)
+      ) {
+        realJob.status = 'FAILED';
+        realJob.last_error = 'Локал бодит WAV файл олдсонгүй эсвэл SHA256 зөрүүтэй байна.';
+        dirty = true;
       }
     }
+
+    for (const mockJob of Object.values(store.mock_jobs)) {
+      const row = sourceById.get(mockJob.source_id);
+      if (!row) continue;
+      const fp = computeJobFingerprint(row, mockJob);
+      const isStale = mockJob.fingerprint !== fp;
+      if (mockJob.stale !== isStale) {
+        mockJob.stale = isStale;
+        dirty = true;
+      }
+      if (
+        mockJob.status === 'MOCK' &&
+        !verifyScopedAudioFile('mock', mockJob.filename, mockJob.audio_sha256)
+      ) {
+        mockJob.status = 'FAILED';
+        mockJob.last_error = 'Локал MOCK WAV файл олдсонгүй.';
+        dirty = true;
+      }
+    }
+
     if (dirty) saveStore(store);
 
     res.json({
@@ -201,10 +217,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
   router.post('/runtime/refresh', async (_req, res) => {
     const store = loadStore();
-    const firstReal = store.real_jobs[FIRST_PILOT_SOURCE_ID];
-    const firstRealVerified = Boolean(
-      firstReal && firstReal.status === 'REAL_SUCCESS' && !firstReal.is_mock
-    );
+    const firstRealVerified = hasVerifiedFirstRealWav(store);
     const runtime = await probeRuntime(true, firstRealVerified);
     res.json({ runtime });
   });
@@ -238,9 +251,11 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     }
 
     const now = new Date().toISOString();
+    const sourceById = new Map(store.sources.map((r) => [r.source_id, r]));
     for (const row of store.sources) {
       if (!store.qa[row.source_id]) {
         store.qa[row.source_id] = {
+          qa_key: row.source_id,
           source_id: row.source_id,
           listening_qa: 'QA_PENDING',
           publication_gate: 'BLOCKED_FOR_RELEASE',
@@ -250,19 +265,13 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
           updated_at: now,
         };
       }
-      for (const receiptMap of [store.real_jobs, store.mock_jobs]) {
-        const existingJob = receiptMap[row.source_id];
-        if (existingJob) {
-          const fp = computeGenerationFingerprint({
-            source_id: row.source_id,
-            dataset_version: row.dataset_version,
-            exact_text_sha256: row.text_sha256,
-            model: existingJob.model,
-            voice: existingJob.voice,
-            speed_profile: existingJob.speed_profile,
-          });
-          existingJob.stale = existingJob.fingerprint !== fp;
-        }
+    }
+
+    for (const receiptMap of [store.real_jobs, store.mock_jobs]) {
+      for (const existingJob of Object.values(receiptMap)) {
+        const row = sourceById.get(existingJob.source_id);
+        if (!row) continue;
+        existingJob.stale = existingJob.fingerprint !== computeJobFingerprint(row, existingJob);
       }
     }
 
@@ -290,7 +299,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     const {
       sourceId,
       voice = VERTEX_VOICE,
-      speedProfile = 'normal',
+      speechStyle = 'natural',
       mode = 'vertex',
       acknowledgePrivateTest = false,
       forceRegenerate = false,
@@ -301,19 +310,17 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
-    if (speedProfile !== 'normal') {
+    if (speechStyle !== 'natural' && speechStyle !== 'learning_slow') {
       res.status(400).json({
-        error: 'Slow хурдны горим туршилт/зөвшөөрөлгүй тул түр хаалттай байна. Зөвхөн Normal горимыг ашиглана уу.',
+        error: 'Хүчингүй speechStyle. Зөвхөн "natural" эсвэл "learning_slow" сонгох боломжтой.',
       });
       return;
     }
 
+    const styleDef = SPEECH_STYLE_PROFILES[speechStyle as SpeechStyle];
     const execMode: ExecutionMode = mode === 'mock' ? 'mock' : 'vertex';
     const store = loadStore();
-    const firstReal = store.real_jobs[FIRST_PILOT_SOURCE_ID];
-    const firstRealVerified = Boolean(
-      firstReal && firstReal.status === 'REAL_SUCCESS' && !firstReal.is_mock
-    );
+    const firstRealVerified = hasVerifiedFirstRealWav(store);
     const runtime = await probeRuntime(false, firstRealVerified);
 
     const ownerKey = (req as any).ownerAuth?.email ?? req.ip ?? 'owner';
@@ -345,30 +352,60 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
-    // Requirement #3: Do not generate remaining 4 real WAVs until PH001 is generated & verified as 1 real WAV!
+    // Do not generate remaining 4 real WAVs until PH001 is generated & verified as a real WAV!
     if (execMode === 'vertex' && row.source_id !== FIRST_PILOT_SOURCE_ID && !firstRealVerified) {
       res.status(409).json({
         code: 'FIRST_REAL_WAV_REQUIRED',
-        error: `Эхлээд ${FIRST_PILOT_SOURCE_ID} (Dobrý den.) мөрийг 1 бодит WAV болгон үүсгэж баталгаажуулсны дараа үлдсэн 4 мөрийг үүсгэнэ.`,
+        error: `Эхлээд ${FIRST_PILOT_SOURCE_ID} (Dobrý den.) мөрийг бодит WAV болгон үүсгэж баталгаажуулсны дараа үлдсэн 4 мөрийг үүсгэнэ.`,
       });
       return;
     }
 
+    const receiptKey = getVariantKey(row.source_id, styleDef.id);
     const fpInput = {
       source_id: row.source_id,
       dataset_version: row.dataset_version,
       exact_text_sha256: row.text_sha256,
       model: VERTEX_MODEL,
       voice: String(voice),
-      speed_profile: speedProfile as SpeedProfile,
+      speed_profile: styleDef.speed_profile,
+      speech_style: styleDef.id,
+      style_version: styleDef.style_version,
     };
     const fingerprint = computeGenerationFingerprint(fpInput);
     const baseFilename = buildDeterministicFilename(fpInput);
     const scopedFilename = execMode === 'mock' ? `MOCK_${baseFilename}` : baseFilename;
+    const gcsObjectPath = `real/${row.dataset_version}/${styleDef.id}/${styleDef.style_version}/${scopedFilename}`;
     const now = new Date().toISOString();
 
+    const ensureVariantQaRecord = (audioSha256: string | null) => {
+      if (!store.qa[receiptKey]) {
+        store.qa[receiptKey] = {
+          qa_key: receiptKey,
+          source_id: row.source_id,
+          speech_style: styleDef.id,
+          style_version: styleDef.style_version,
+          receipt_key: receiptKey,
+          audio_sha256: audioSha256,
+          listening_qa: 'QA_PENDING',
+          publication_gate: 'BLOCKED_FOR_RELEASE',
+          issue_category: '',
+          notes: '',
+          reviewer: (req as any).ownerAuth?.email ?? 'owner',
+          updated_at: now,
+        };
+      } else if (audioSha256 && store.qa[receiptKey].audio_sha256 !== audioSha256) {
+        store.qa[receiptKey] = {
+          ...store.qa[receiptKey],
+          audio_sha256: audioSha256,
+          listening_qa: 'QA_PENDING',
+          updated_at: now,
+        };
+      }
+    };
+
     if (execMode === 'mock') {
-      const existingMock = store.mock_jobs[row.source_id];
+      const existingMock = store.mock_jobs[receiptKey];
       if (
         !forceRegenerate &&
         existingMock &&
@@ -379,20 +416,21 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       ) {
         appendEvent(store, {
           event_type: 'IDEMPOTENT_SKIP_MOCK',
-          source_id: row.source_id,
+          source_id: receiptKey,
           mode: 'mock',
-          detail: `MOCK fingerprint (${fingerprint.slice(0, 10)}…) давхцсан тул алгаслаа.`,
+          detail: `MOCK [${styleDef.short_label}] fingerprint (${fingerprint.slice(0, 10)}…) давхцсан тул алгаслаа.`,
         });
         saveStore(store);
         res.json({ skipped: true, job: existingMock });
         return;
       }
 
-      const wavBytes = generateMockSpeechWav(row.cs_exact, row.source_id);
+      const wavBytes = generateMockSpeechWav(row.cs_exact, row.source_id, styleDef.id);
       const parsed = parseWavHeader(wavBytes);
       const stored = writeScopedAudioFile('mock', scopedFilename, wavBytes);
 
       const mockReceipt: AudioJobReceipt = {
+        receipt_key: receiptKey,
         source_id: row.source_id,
         dataset_version: row.dataset_version,
         cs_exact_sha256: row.text_sha256,
@@ -401,7 +439,10 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         provider: 'local-mock-synth',
         model: VERTEX_MODEL,
         voice: String(voice),
-        speed_profile: 'normal',
+        speed_profile: styleDef.speed_profile,
+        speech_style: styleDef.id,
+        style_version: styleDef.style_version,
+        style_prompt: styleDef.style_prompt,
         status: 'MOCK',
         is_mock: true,
         http_status: null,
@@ -418,27 +459,29 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         rms_dbfs: parsed.rmsDbfs,
         format: 'wav',
         storage_ref: `local://mock/${scopedFilename}`,
+        gcs_object_path: null,
         storage_backend: 'local-preview-ephemeral',
         stale: false,
         created_at: existingMock?.created_at ?? now,
         updated_at: now,
       };
 
-      // Strict isolation: write ONLY to store.mock_jobs, never touch store.real_jobs
-      store.mock_jobs[row.source_id] = mockReceipt;
+      // Strict isolation: write ONLY under variant key in store.mock_jobs; never touch real_jobs
+      store.mock_jobs[receiptKey] = mockReceipt;
+      ensureVariantQaRecord(stored.sha256);
       appendEvent(store, {
         event_type: 'MOCK_WAV_GENERATED',
-        source_id: row.source_id,
+        source_id: receiptKey,
         mode: 'mock',
-        detail: `Тусгаарлагдсан MOCK WAV үүслээ (${parsed.durationMs} ms). Бодит real_jobs-д нөлөөлөөгүй.`,
+        detail: `MOCK [${styleDef.short_label} ${styleDef.style_version}] үүслээ (${parsed.durationMs} ms). Бодит real_jobs-д нөлөөлөөгүй.`,
       });
       saveStore(store);
       res.json({ skipped: false, job: mockReceipt });
       return;
     }
 
-    // REAL Vertex AI TTS generation path
-    const existingReal = store.real_jobs[row.source_id];
+    // REAL Vertex AI TTS generation path (stored under receiptKey, never overwriting prior legacy PH001!)
+    const existingReal = store.real_jobs[receiptKey];
     if (
       !forceRegenerate &&
       existingReal &&
@@ -451,7 +494,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       if (existingReal.storage_backend === 'gcs-private-bucket' && runtime.gcs_bucket && runtime.adc_available) {
         const gcsBuf = await downloadFromGcsPrivateBucket(
           runtime.gcs_bucket,
-          `real/${row.dataset_version}/${existingReal.filename}`
+          existingReal.gcs_object_path ?? gcsObjectPath
         );
         if (gcsBuf) {
           const sha = crypto.createHash('sha256').update(gcsBuf).digest('hex');
@@ -464,9 +507,9 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       if (existsDurably) {
         appendEvent(store, {
           event_type: 'IDEMPOTENT_SKIP_REAL',
-          source_id: row.source_id,
+          source_id: receiptKey,
           mode: 'vertex',
-          detail: `Бодит WAV ба fingerprint (${fingerprint.slice(0, 10)}…) баталгаажсан тул давхар дуудлагыг алгаслаа.`,
+          detail: `Бодит WAV [${styleDef.short_label}] ба fingerprint (${fingerprint.slice(0, 10)}…) баталгаажсан тул давхар дуудлагыг алгаслаа.`,
         });
         saveStore(store);
         res.json({ skipped: true, job: existingReal });
@@ -476,13 +519,14 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
     if (existingReal?.status === 'AMBIGUOUS_RETRY_REVIEW' && !forceRegenerate) {
       res.status(409).json({
-        error: `${row.source_id} өмнөх дуудлага эргэлзээтэй (AMBIGUOUS_RETRY_REVIEW) тул зогслоо.`,
+        error: `${receiptKey} өмнөх дуудлага эргэлзээтэй (AMBIGUOUS_RETRY_REVIEW) тул зогслоо.`,
       });
       return;
     }
 
     if (!runtime.vertex_connected) {
       const notConnectedReceipt: AudioJobReceipt = {
+        receipt_key: receiptKey,
         source_id: row.source_id,
         dataset_version: row.dataset_version,
         cs_exact_sha256: row.text_sha256,
@@ -491,7 +535,10 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         provider: 'vertex-ai',
         model: VERTEX_MODEL,
         voice: String(voice),
-        speed_profile: 'normal',
+        speed_profile: styleDef.speed_profile,
+        speech_style: styleDef.id,
+        style_version: styleDef.style_version,
+        style_prompt: styleDef.style_prompt,
         status: 'NOT_CONNECTED',
         is_mock: false,
         http_status: 503,
@@ -510,14 +557,15 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         rms_dbfs: null,
         format: null,
         storage_ref: null,
+        gcs_object_path: gcsObjectPath,
         storage_backend: null,
         stale: false,
         created_at: existingReal?.created_at ?? now,
         updated_at: now,
       };
-      store.real_jobs[row.source_id] = notConnectedReceipt;
+      store.real_jobs[receiptKey] = notConnectedReceipt;
       appendError(store, {
-        source_id: row.source_id,
+        source_id: receiptKey,
         http_status: 503,
         code: 'VERTEX_ADC_NOT_CONFIGURED',
         message: notConnectedReceipt.last_error ?? 'Vertex AI ADC not configured',
@@ -531,7 +579,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
-    // Requirement #4: Prevent billable TTS whenever durable Cloud Storage (GCS_BUCKET_NAME + IAM) is NOT verified
+    // Prevent billable TTS whenever durable Cloud Storage (GCS_BUCKET_NAME + IAM) is NOT verified
     if (
       runtime.storage_backend !== 'gcs-private-bucket' ||
       !runtime.gcs_bucket ||
@@ -541,7 +589,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         runtime.gcs_error ??
         'Байнгын Cloud Storage (GCS_BUCKET_NAME болон storage.objects.create/get эрх) баталгаажаагүй тул төлбөртэй Vertex TTS дуудлагыг зогсоолоо.';
       appendError(store, {
-        source_id: row.source_id,
+        source_id: receiptKey,
         http_status: 503,
         code: 'EPHEMERAL_STORAGE_BLOCKED',
         message: storageMsg,
@@ -554,10 +602,11 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
-    const ttsRes = await invokeVertexTts(row.cs_exact, String(voice), 3);
+    const ttsRes = await invokeVertexTts(row.cs_exact, String(voice), styleDef.style_prompt, 3);
     if (!ttsRes.ok || !ttsRes.wavBytes) {
       const errStatus = ttsRes.ambiguous ? 'AMBIGUOUS_RETRY_REVIEW' : 'FAILED';
       const receipt: AudioJobReceipt = {
+        receipt_key: receiptKey,
         source_id: row.source_id,
         dataset_version: row.dataset_version,
         cs_exact_sha256: row.text_sha256,
@@ -566,7 +615,10 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         provider: 'vertex-ai',
         model: VERTEX_MODEL,
         voice: String(voice),
-        speed_profile: 'normal',
+        speed_profile: styleDef.speed_profile,
+        speech_style: styleDef.id,
+        style_version: styleDef.style_version,
+        style_prompt: styleDef.style_prompt,
         status: errStatus,
         is_mock: false,
         http_status: ttsRes.httpStatus,
@@ -583,14 +635,15 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         rms_dbfs: null,
         format: null,
         storage_ref: null,
+        gcs_object_path: gcsObjectPath,
         storage_backend: null,
         stale: false,
         created_at: existingReal?.created_at ?? now,
         updated_at: now,
       };
-      store.real_jobs[row.source_id] = receipt;
+      store.real_jobs[receiptKey] = receipt;
       appendError(store, {
-        source_id: row.source_id,
+        source_id: receiptKey,
         http_status: ttsRes.httpStatus,
         code: ttsRes.errorCode ?? 'VERTEX_TTS_ERROR',
         message: ttsRes.errorMessage ?? 'Vertex AI TTS дуудлага амжилтгүй.',
@@ -607,15 +660,10 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     const parsed = parseWavHeader(ttsRes.wavBytes);
     let storageRef: string;
     try {
-      storageRef = await uploadToGcs(
-        runtime.gcs_bucket,
-        `real/${row.dataset_version}/${scopedFilename}`,
-        ttsRes.wavBytes,
-        'audio/wav'
-      );
+      storageRef = await uploadToGcs(runtime.gcs_bucket, gcsObjectPath, ttsRes.wavBytes, 'audio/wav');
     } catch (gcsErr) {
       appendError(store, {
-        source_id: row.source_id,
+        source_id: receiptKey,
         http_status: 502,
         code: 'GCS_UPLOAD_FAILED',
         message: gcsErr instanceof Error ? gcsErr.message : 'GCS хадгалалт амжилтгүй.',
@@ -631,6 +679,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     const storageBackend = 'gcs-private-bucket' as const;
 
     const realReceipt: AudioJobReceipt = {
+      receipt_key: receiptKey,
       source_id: row.source_id,
       dataset_version: row.dataset_version,
       cs_exact_sha256: row.text_sha256,
@@ -639,7 +688,10 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       provider: 'vertex-ai',
       model: VERTEX_MODEL,
       voice: String(voice),
-      speed_profile: 'normal',
+      speed_profile: styleDef.speed_profile,
+      speech_style: styleDef.id,
+      style_version: styleDef.style_version,
+      style_prompt: styleDef.style_prompt,
       status: 'REAL_SUCCESS',
       is_mock: false,
       http_status: ttsRes.httpStatus,
@@ -656,18 +708,20 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       rms_dbfs: parsed.rmsDbfs,
       format: 'wav',
       storage_ref: storageRef,
+      gcs_object_path: gcsObjectPath,
       storage_backend: storageBackend,
       stale: false,
       created_at: existingReal?.created_at ?? now,
       updated_at: now,
     };
 
-    store.real_jobs[row.source_id] = realReceipt;
+    store.real_jobs[receiptKey] = realReceipt;
+    ensureVariantQaRecord(localStored.sha256);
     appendEvent(store, {
       event_type: 'REAL_VERTEX_WAV_SAVED',
-      source_id: row.source_id,
+      source_id: receiptKey,
       mode: 'vertex',
-      detail: `HTTP ${ttsRes.httpStatus} · ${parsed.durationMs} ms · ${storageBackend}`,
+      detail: `[${styleDef.short_label} ${styleDef.style_version}] HTTP ${ttsRes.httpStatus} · ${parsed.durationMs} ms · ${storageBackend}`,
     });
     saveStore(store);
 
@@ -695,7 +749,13 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
   router.post('/qa/:sourceId', async (req, res) => {
     const { sourceId } = req.params;
-    const { listening_qa, issue_category = '', notes = '' } = req.body ?? {};
+    const {
+      listening_qa,
+      issue_category = '',
+      notes = '',
+      speechStyle,
+      qaKey,
+    } = req.body ?? {};
     if (!['QA_PENDING', 'PASS', 'REVIEW', 'FAIL'].includes(listening_qa)) {
       res.status(400).json({ error: 'Хүчингүй QA төлөв.' });
       return;
@@ -708,9 +768,29 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
+    let validStyle: SpeechStyle | undefined;
+    if (speechStyle === 'natural' || speechStyle === 'learning_slow') {
+      validStyle = speechStyle;
+    } else if (speechStyle !== undefined) {
+      res.status(400).json({ error: 'Хүчингүй speechStyle.' });
+      return;
+    }
+
+    const targetQaKey = validStyle
+      ? getVariantKey(sourceId, validStyle)
+      : typeof qaKey === 'string' && qaKey.startsWith(sourceId)
+      ? qaKey
+      : sourceId;
+
+    const matchingJob =
+      store.real_jobs[targetQaKey] ?? store.mock_jobs[targetQaKey] ?? store.real_jobs[sourceId];
+
     const now = new Date().toISOString();
     const qaRecord = {
+      qa_key: targetQaKey,
       source_id: sourceId,
+      ...(validStyle ? { speech_style: validStyle, style_version: SPEECH_STYLE_PROFILES[validStyle].style_version } : {}),
+      ...(matchingJob ? { receipt_key: getJobReceiptKey(matchingJob), audio_sha256: matchingJob.audio_sha256 } : {}),
       listening_qa,
       publication_gate: 'BLOCKED_FOR_RELEASE' as const,
       issue_category: String(issue_category),
@@ -719,12 +799,12 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       updated_at: now,
     };
 
-    store.qa[sourceId] = qaRecord;
+    store.qa[targetQaKey] = qaRecord;
     appendEvent(store, {
       event_type: 'QA_UPDATED',
-      source_id: sourceId,
+      source_id: targetQaKey,
       mode: 'system',
-      detail: `Сонсож шалгах дүн: ${listening_qa}`,
+      detail: `Сонсож шалгах дүн [${validStyle ?? 'legacy'}]: ${listening_qa}`,
     });
     saveStore(store);
 
@@ -764,6 +844,24 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
     const store = loadStore();
+
+    // Enforce QA PASS policy: REVIEW / FAIL / unverified real WAVs cannot be synced as app-ready Drive audio
+    for (const fileItem of uploadedFiles) {
+      if (fileItem?.kind === 'wav' && typeof fileItem.name === 'string' && !fileItem.name.startsWith('MOCK_')) {
+        const job = Object.values(store.real_jobs).find((j) => j.filename === fileItem.name);
+        if (job) {
+          const qaRec = getQaForJob(store.qa, job);
+          if (!qaRec || qaRec.listening_qa !== 'PASS') {
+            res.status(409).json({
+              code: 'QA_GATE_BLOCKED_FOR_DRIVE',
+              error: `${fileItem.name} файлын QA төлөв (${qaRec?.listening_qa ?? 'QA_PENDING'}) тул PASS болоогүй эсвэл REVIEW/FAIL файлыг Google Drive-д апп аудио гэж синк хийхгүй.`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
     store.drive.last_synced_at = new Date().toISOString();
     store.drive.uploaded_files = uploadedFiles.slice(0, 100);
     appendEvent(store, {
@@ -802,7 +900,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       if (runtime.gcs_bucket && runtime.adc_available) {
         buf = await downloadFromGcsPrivateBucket(
           runtime.gcs_bucket,
-          `real/${matchingJob.dataset_version}/${safeName}`
+          matchingJob.gcs_object_path ?? `real/${matchingJob.dataset_version}/${safeName}`
         );
       }
     }
@@ -884,6 +982,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         `Dataset Version: ${store.dataset_version}`,
         `Canonical Curriculum SHA256: ${store.canonical_curriculum_sha256}`,
         'Policy: Real WAVs and MOCK WAVs are stored in strictly isolated folders.',
+        'Policy: Only QA PASS real WAVs are eligible for Google Drive app-audio sync.',
         'CZ-A0-M01-L01-PH006 has source_gate=BLOCK_DOMAIN and must NEVER be auto-released.',
       ].join('\n')
     );
@@ -892,9 +991,8 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     let includedReal = 0;
     const runtime = await probeRuntime(false, false);
 
-    for (const row of store.sources) {
-      const realJob = store.real_jobs[row.source_id];
-      if (realJob && realJob.status === 'REAL_SUCCESS' && !realJob.is_mock) {
+    for (const realJob of Object.values(store.real_jobs)) {
+      if (realJob.status === 'REAL_SUCCESS' && !realJob.is_mock) {
         let buf: Buffer | null = null;
         if (
           realJob.storage_backend === 'gcs-private-bucket' &&
@@ -903,7 +1001,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         ) {
           buf = await downloadFromGcsPrivateBucket(
             runtime.gcs_bucket,
-            `real/${row.dataset_version}/${realJob.filename}`
+            realJob.gcs_object_path ?? `real/${realJob.dataset_version}/${realJob.filename}`
           );
         }
         if (!buf) buf = readScopedAudioFile('real', realJob.filename);
@@ -916,9 +1014,8 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
     if (includeMock) {
       const mockFolder = zip.folder('wav/mock');
-      for (const row of store.sources) {
-        const mockJob = store.mock_jobs[row.source_id];
-        if (mockJob && mockJob.status === 'MOCK' && mockJob.is_mock) {
+      for (const mockJob of Object.values(store.mock_jobs)) {
+        if (mockJob.status === 'MOCK' && mockJob.is_mock) {
           const buf = readScopedAudioFile('mock', mockJob.filename);
           if (buf && mockFolder) {
             mockFolder.file(mockJob.filename, buf);
