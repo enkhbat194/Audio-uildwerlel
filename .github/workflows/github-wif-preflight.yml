@@ -1,0 +1,68 @@
+name: Audio Factory - WIF keyless preflight
+
+# This workflow is ONLY a federation connectivity probe.
+# It never requests TTS, reads/writes a GCS object, or deploys Render/Cloud Run.
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - .github/workflows/github-wif-preflight.yml
+      - scripts/bootstrap-github-wif.sh
+      - docs/GITHUB_WIF_HANDOFF.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: Check WIF configuration (no cloud access)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch and configured repository variables
+        env:
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          PROVIDER: ${{ vars.AHOJ_WIF_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.AHOJ_WIF_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          test "$REPO" = "enkhbat194/Audio-uildwerlel"
+          test "$REF" = "refs/heads/experiment/free-hosting-render-20261118"
+          if [[ -z "$PROVIDER" || -z "$SERVICE_ACCOUNT" ]]; then
+            echo "WIF_NOT_CONFIGURED: repository variables AHOJ_WIF_PROVIDER and AHOJ_WIF_SERVICE_ACCOUNT are required for the opt-in token probe."
+          else
+            echo "WIF_CONFIGURED: the preflight token job may run (no TTS, no storage writes)."
+          fi
+
+  token-only:
+    name: Mint short-lived token (no TTS or GCS calls)
+    needs: readiness
+    if: ${{ vars.AHOJ_WIF_PROVIDER != '' && vars.AHOJ_WIF_SERVICE_ACCOUNT != '' && github.repository == 'enkhbat194/Audio-uildwerlel' && github.ref == 'refs/heads/experiment/free-hosting-render-20261118' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted branch
+        uses: actions/checkout@v4
+      - name: Authenticate via GitHub OIDC without a service account key
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: project-a699c3ff-995a-4b88-add
+          workload_identity_provider: ${{ vars.AHOJ_WIF_PROVIDER }}
+          service_account: ${{ vars.AHOJ_WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: false
+          export_environment_variables: false
+          token_format: access_token
+          access_token_lifetime: 600s
+      - name: Check token issuance without logging its contents
+        env:
+          FEDERATED_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          test -n "$FEDERATED_TOKEN"
+          echo "WIF_TOKEN_OK: short-lived token minted. No Vertex AI or Cloud Storage requests were made."
