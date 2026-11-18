@@ -1,0 +1,40 @@
+name: Audio Factory - free hosting CI
+
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+  pull_request:
+    branches:
+      - experiment/free-hosting-render-20261118
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-factory-free-hosting-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-build:
+    name: TypeScript, tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: TypeScript diagnostics
+        run: bun run lint
+      - name: Automated tests
+        run: bun run test
+      - name: Build Vite distribution
+        run: bun run build
+      - name: Confirm build artifact
+        run: test -f dist/index.html
