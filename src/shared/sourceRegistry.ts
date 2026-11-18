@@ -83,8 +83,17 @@ export function getQaForJob(
 
 export function isJobDriveEligible(
   job: AudioJobReceipt,
-  qaMap: Record<string, QaRecord>
+  qaMap: Record<string, QaRecord>,
+  source?: SourceRow
 ): boolean {
+  // Never send BLOCK_DOMAIN rows as app audio. Source text and dataset must
+  // still match the immutable receipt even when a QA record says PASS.
+  if (source && (
+    source.source_gate === 'BLOCK_DOMAIN' ||
+    source.source_id !== job.source_id ||
+    source.text_sha256 !== job.cs_exact_sha256 ||
+    source.dataset_version !== job.dataset_version
+  )) return false;
   // A PASS decision applies to one immutable WAV, not to any later regeneration
   // of the same Czech sentence / speech style.
   if (job.is_mock || job.status !== 'REAL_SUCCESS' || job.stale) return false;
