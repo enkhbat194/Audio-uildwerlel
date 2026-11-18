@@ -20,26 +20,24 @@ jobs:
     name: Check WIF configuration (no cloud access)
     runs-on: ubuntu-latest
     steps:
-      - name: Check branch and configured repository variables
+      - name: Check branch and fixed non-secret WIF resource identifiers
         env:
           REPO: ${{ github.repository }}
           REF: ${{ github.ref }}
-          PROVIDER: ${{ vars.AHOJ_WIF_PROVIDER }}
-          SERVICE_ACCOUNT: ${{ vars.AHOJ_WIF_SERVICE_ACCOUNT }}
+          PROVIDER: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          SERVICE_ACCOUNT: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
         run: |
           set -euo pipefail
           test "$REPO" = "enkhbat194/Audio-uildwerlel"
           test "$REF" = "refs/heads/experiment/free-hosting-render-20261118"
-          if [[ -z "$PROVIDER" || -z "$SERVICE_ACCOUNT" ]]; then
-            echo "WIF_NOT_CONFIGURED: repository variables AHOJ_WIF_PROVIDER and AHOJ_WIF_SERVICE_ACCOUNT are required for the opt-in token probe."
-          else
-            echo "WIF_CONFIGURED: the preflight token job may run (no TTS, no storage writes)."
-          fi
+          test "$PROVIDER" = "projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight"
+          test "$SERVICE_ACCOUNT" = "ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com"
+          echo "WIF_CONFIGURED: using fixed non-secret resource names; no repository variables needed."
 
   token-only:
     name: Mint short-lived token (no TTS or GCS calls)
     needs: readiness
-    if: ${{ vars.AHOJ_WIF_PROVIDER != '' && vars.AHOJ_WIF_SERVICE_ACCOUNT != '' && github.repository == 'enkhbat194/Audio-uildwerlel' && github.ref == 'refs/heads/experiment/free-hosting-render-20261118' }}
+    if: ${{ github.repository == 'enkhbat194/Audio-uildwerlel' && github.ref == 'refs/heads/experiment/free-hosting-render-20261118' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,8 +51,8 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           project_id: project-a699c3ff-995a-4b88-add
-          workload_identity_provider: ${{ vars.AHOJ_WIF_PROVIDER }}
-          service_account: ${{ vars.AHOJ_WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
           create_credentials_file: false
           export_environment_variables: false
           token_format: access_token
