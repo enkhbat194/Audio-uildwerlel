@@ -1,0 +1,20 @@
+{
+  "run": "fluent-v2-20261119",
+  "source": "QA-ONLY-FULL-SENTENCE-001",
+  "exact_text": "Můžete mi prosím říct, kde je nejbližší autobusová zastávka a jak se tam dostanu?",
+  "variants": [
+    "natural",
+    "learning_slow"
+  ],
+  "mode": "artifact_only",
+  "qa_gates": [
+    "strict_whisper_czech_transcription",
+    "wav_integrity",
+    "internal_mid_sentence_pause_limit"
+  ],
+  "max_total_billable_tts_requests": 2,
+  "repeat_on_error": false,
+  "production_release": false,
+  "google_drive_auto_sync": false,
+  "source_lock_unchanged": true
+}
