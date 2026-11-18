@@ -15,6 +15,7 @@ on:
       - qa/requests/VOICE_QA_FLUENT_V2_20261119.json
       - production/requests/2026-11-19-pilot4.json
       - production/requests/2026-11-19-repair-jm.json
+      - production/requests/2026-11-19-dialogue-b01.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -349,5 +350,59 @@ jobs:
         with:
           name: ahoj-ph003-natural-repair-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-ph003-repair/
+          retention-days: 30
+          if-no-files-found: warn
+
+  curriculum-dialogue-a0-b01:
+    name: Czech A0 workplace dialogue six turns, two voices, context-aligned delivery
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): A0 workplace six-turn dialogue once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out source-locked editorial pilot
+        uses: actions/checkout@v4
+      - name: Existing GitHub Google WIF
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Offline Czech ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Exactly 6 dialogue turns with grounded emotion and automatic QA
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/produce_curriculum_batch.py scripts/voice_quality_full_sentence.py
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json \
+            --out-dir "${{ runner.temp }}/ahoj-dialogue-a0-b01" --generate
+          python3 - <<'PY'
+          import json
+          p = r"${{ runner.temp }}/ahoj-dialogue-a0-b01/production_report.json"
+          d = json.load(open(p))
+          assert d["attempted_calls"] <= 6 and len(d["rows"]) == 6 and d["release_allowed"] is False
+          print("DIALOGUE_A0_B01_QA", json.dumps(d["counts"], sort_keys=True))
+          PY
+      - name: Preserve only internal candidate audio and QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-a0-dialogue-B01-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-dialogue-a0-b01/
           retention-days: 30
           if-no-files-found: warn
