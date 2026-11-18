@@ -131,8 +131,22 @@ def main():
     p.add_argument("--manifest", required=True)
     p.add_argument("--out-dir", default="/tmp/ahoj-curriculum-pilot")
     p.add_argument("--generate", action="store_true", help="Exactly capped, potentially billable Vertex TTS calls")
+    p.add_argument("--only-source", help="Restrict a correction to one previously authorized source ID")
+    p.add_argument("--only-style", choices=ALLOWED_STYLES,
+                   help="Restrict a correction to one previously authorized voice style")
+    p.add_argument("--repair-jm", action="store_true",
+                   help="Correct the documented initial jm-cluster omission in PH003")
     args = p.parse_args()
     cfg = source_validate(args.manifest)
+    if bool(args.only_source) != bool(args.only_style):
+        p.error("--only-source and --only-style must both be specified")
+    if args.only_source:
+        cfg["rows"] = [r for r in cfg["rows"] if r["source_id"] == args.only_source]
+        cfg["variants"] = [args.only_style]
+        if len(cfg["rows"]) != 1:
+            raise SystemExit("UNKNOWN_OR_UNAUTHORIZED_SOURCE")
+    if args.repair_jm and (args.only_source != "CZ-A0-M01-L01-PH003" or args.only_style != "natural"):
+        p.error("--repair-jm requires only PH003 Natural")
     count = len(cfg["rows"]) * len(cfg["variants"])
     print("AHOJ_FIRST_LESSON_BATCH_READY", cfg["batch_id"], "sources", len(cfg["rows"]),
           "TTS_calls", count, "private_only", True)
@@ -170,6 +184,10 @@ def main():
                       "source_gate": source["source_gate"], "publication_gate": "BLOCKED_FOR_RELEASE"}
             try:
                 direction = voice_direction(source, style)
+                if args.repair_jm:
+                    direction += (" Pay attention to the distinct initial Czech consonant sequence "
+                                  "j-m in the word jmenujete. Pronounce that word fully and naturally; "
+                                  "do not omit its first consonant or add any explanatory words.")
                 print("GENERATE", uid, style, flush=True)
                 report["attempted_calls"] += 1
                 audio, info = fetch_audio(style, direction, token, text=source["cs_exact"])
