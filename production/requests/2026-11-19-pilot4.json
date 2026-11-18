@@ -1,0 +1,11 @@
+{
+  "run_id": "AHOJ_20261119_PRIVATE_LESSON_PILOT4",
+  "source_manifest": "production/manifest/2026-11-19-first-4-verified.json",
+  "request": "Generate four distinct canonical Czech phrases in teacher Natural + Learning Slow, no dialogue invention",
+  "max_billable_tts_requests": 8,
+  "no_automatic_retry": true,
+  "auto_asr_and_pause_quality": true,
+  "production_release": false,
+  "storage": "GitHub Actions private artifact; sync only machine-passed internal pilots to Drive after verification",
+  "approved_by_user": "2026-11-19: Start audio manufacturing without manual QA; teacher-friendly Czech; contextual emotion only for dialogues"
+}
