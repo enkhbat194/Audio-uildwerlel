@@ -134,6 +134,8 @@ def main() -> int:
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--model", default="small")
+    parser.add_argument("--fallback-model", default="medium",
+                        help="Use a stronger independent offline ASR if initial transcript differs")
     parser.add_argument("--technical-only", action="store_true", help="Diagnostic only. NEVER AUTO_PASS.")
     args = parser.parse_args()
     input_dir = Path(args.input_dir)
@@ -168,9 +170,21 @@ def main() -> int:
             try:
                 heard = transcribe(model, path)
                 accuracy = score_text(exact_text, heard)
-                # Czech: one plausible recognition typo may be tolerated on long sentences;
-                # short phrase errors are not automatically accepted.
-                match = accuracy["wer"] <= 0.10 and accuracy["cer"] <= 0.065
+                # Speech mismatches can change Czech morphology and meaning.
+                # A near match is NOT an automatic PASS. A second, stronger ASR
+                # pass attempts to distinguish Whisper errors from TTS errors.
+                match = accuracy["exact"]
+                if not match and args.fallback_model and args.fallback_model != args.model:
+                    try:
+                        fallback = asr_engine(args.fallback_model)
+                        fallback_heard = transcribe(fallback, path)
+                        fallback_accuracy = score_text(exact_text, fallback_heard)
+                        accuracy["fallback_model"] = args.fallback_model
+                        accuracy["fallback_transcript"] = fallback_heard
+                        accuracy["fallback_exact"] = fallback_accuracy["exact"]
+                        match = fallback_accuracy["exact"]
+                    except Exception as fallback_error:
+                        accuracy["fallback_error"] = str(fallback_error)
                 decision = "AUTO_PASS" if match else "QUARANTINED"
             except Exception as exc:
                 heard = ""
