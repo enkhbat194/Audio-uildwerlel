@@ -1,37 +1,61 @@
 import {
   AlertTriangle,
   Check,
+  Download,
   Pause,
   Play,
   Repeat,
   Volume2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { AudioJobReceipt, QaRecord, QaStatus, SourceRow } from '../shared/types';
+import { authedFetch, downloadAuthedFile } from '../lib/apiClient';
+import type {
+  AudioJobReceipt,
+  ExecutionMode,
+  QaRecord,
+  QaStatus,
+  SourceRow,
+} from '../shared/types';
 import { JobStatusLabel, QaStatusLabel } from './StatusBadge';
 
 interface ListeningQaViewProps {
   sources: SourceRow[];
-  jobs: Record<string, AudioJobReceipt>;
+  realJobs: Record<string, AudioJobReceipt>;
+  mockJobs: Record<string, AudioJobReceipt>;
+  mode: ExecutionMode;
   qa: Record<string, QaRecord>;
   selectedSourceId: string;
   onSelectSourceId: (id: string) => void;
-  onSaveQa: (sourceId: string, payload: { listening_qa: QaStatus; issue_category: string; notes: string }) => Promise<void>;
+  onSaveQa: (
+    sourceId: string,
+    payload: { listening_qa: QaStatus; issue_category: string; notes: string }
+  ) => Promise<void>;
 }
 
 export function ListeningQaView({
   sources,
-  jobs,
+  realJobs,
+  mockJobs,
+  mode,
   qa,
   selectedSourceId,
   onSelectSourceId,
   onSaveQa,
 }: ListeningQaViewProps) {
+  const [scope, setScope] = useState<'real' | 'mock'>(mode === 'mock' ? 'mock' : 'real');
+
+  useEffect(() => {
+    setScope(mode === 'mock' ? 'mock' : 'real');
+  }, [mode]);
+
+  const activeJobMap = scope === 'mock' ? mockJobs : realJobs;
   const activeSource = sources.find((s) => s.source_id === selectedSourceId) ?? sources[0];
-  const activeJob = activeSource ? jobs[activeSource.source_id] : undefined;
+  const activeJob = activeSource ? activeJobMap[activeSource.source_id] : undefined;
   const activeQa = activeSource ? qa[activeSource.source_id] : undefined;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [audioLoadError, setAudioLoadError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [listenSpeed, setListenSpeed] = useState<1 | 0.75>(1);
@@ -57,11 +81,49 @@ export function ListeningQaView({
     }
   }, [listenSpeed, loopEnabled]);
 
-  const playable = Boolean(activeJob && (activeJob.status === 'MOCK' || activeJob.status === 'REAL_SUCCESS'));
-  const audioSrc = playable && activeJob ? `/api/audio/${encodeURIComponent(activeJob.filename)}?v=${encodeURIComponent(activeJob.updated_at)}` : undefined;
+  const playable = Boolean(
+    activeJob &&
+      ((scope === 'real' && activeJob.status === 'REAL_SUCCESS' && !activeJob.is_mock) ||
+        (scope === 'mock' && activeJob.status === 'MOCK' && activeJob.is_mock))
+  );
+
+  useEffect(() => {
+    let active = true;
+    let currentUrl: string | null = null;
+    setAudioBlobUrl(null);
+    setAudioLoadError(null);
+    setIsPlaying(false);
+
+    async function loadAudio() {
+      if (!playable || !activeJob?.filename) return;
+      try {
+        const res = await authedFetch(
+          `/api/audio/${scope}/${encodeURIComponent(activeJob.filename)}?v=${encodeURIComponent(
+            activeJob.updated_at
+          )}`
+        );
+        if (!res.ok) {
+          if (active) setAudioLoadError(`Аудио ачаалж чадсангүй (HTTP ${res.status}).`);
+          return;
+        }
+        const blob = await res.blob();
+        if (!active) return;
+        currentUrl = URL.createObjectURL(blob);
+        setAudioBlobUrl(currentUrl);
+      } catch {
+        if (active) setAudioLoadError('Аудио татахад сүлжээний алдаа гарлаа.');
+      }
+    }
+
+    void loadAudio();
+    return () => {
+      active = false;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
+  }, [playable, scope, activeJob?.filename, activeJob?.updated_at]);
 
   function togglePlay() {
-    if (!audioRef.current || !audioSrc) return;
+    if (!audioRef.current || !audioBlobUrl) return;
     if (audioRef.current.paused) {
       audioRef.current.playbackRate = listenSpeed;
       audioRef.current.loop = loopEnabled;
@@ -101,20 +163,55 @@ export function ListeningQaView({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-          Сонсож шалгах (Listening QA)
-        </h1>
-        <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-          Өгүүлбэр бүрийг сонсож, эх чех тексттэй тулгаад хүний QA дүнг бүртгэнэ.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            Сонсож шалгах (Listening QA)
+          </h1>
+          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
+            Бодит болон MOCK аудиог тусад нь ялгаж сонсоод, эх чех тексттэй тулгаж хүний QA дүнг бүртгэнэ.
+          </p>
+        </div>
+
+        {/* Isolated Scope Toggle */}
+        <div
+          role="group"
+          aria-label="Аудио сангийн төрөл"
+          className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800 rounded-xl self-start"
+        >
+          <button
+            type="button"
+            onClick={() => setScope('real')}
+            className={`px-3.5 py-2 min-h-[38px] text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+              scope === 'real'
+                ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            Бодит WAV (real)
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope('mock')}
+            className={`px-3.5 py-2 min-h-[38px] text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+              scope === 'mock'
+                ? 'bg-white dark:bg-slate-950 text-amber-800 dark:text-amber-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            Тест WAV (mock)
+          </button>
+        </div>
       </div>
 
       {/* Mandatory Technical Validity vs Linguistic Accuracy Disclaimer */}
       <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <p className="text-xs md:text-sm text-amber-950 dark:text-amber-200">
-          <strong>Анхаар:</strong> WAV дохио хүчинтэй (PCM16, 24kHz) гэдэг нь чех уугуул дуудлага зөв гэсэн үг биш. Автомат дуудлагын баталгаа байхгүй тул хүн заавал сонсож баталгаажуулна.
+          <strong>Анхаар:</strong> WAV дохио хүчинтэй (PCM16, 24kHz) гэдэг нь чех уугуул дуудлага зөв гэсэн үг биш.
+          {scope === 'mock'
+            ? ' Одоо зөвхөн тусгаарлагдсан MOCK (синтетик) файл харагдаж байна — үүнийг бодит дуудлага гэж тооцохгүй.'
+            : ' Хүн заавал сонсож чех дуудлагыг баталгаажуулна.'}
         </p>
       </div>
 
@@ -123,7 +220,7 @@ export function ListeningQaView({
         <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden">
           {sources.map((row) => {
             const selected = row.source_id === activeSource.source_id;
-            const rowJob = jobs[row.source_id];
+            const rowJob = activeJobMap[row.source_id];
             const rowQa = qa[row.source_id];
             return (
               <button
@@ -170,11 +267,11 @@ export function ListeningQaView({
               <p className="text-2xl font-bold text-slate-900 dark:text-slate-50">{activeSource.cs_exact}</p>
             </div>
 
-            {playable && audioSrc ? (
+            {playable && audioBlobUrl ? (
               <div className="space-y-4">
                 <audio
                   ref={audioRef}
-                  src={audioSrc}
+                  src={audioBlobUrl}
                   onEnded={() => {
                     if (!loopEnabled) setIsPlaying(false);
                   }}
@@ -219,13 +316,32 @@ export function ListeningQaView({
                   >
                     {listenSpeed === 0.75 ? '0.75x (Зөвхөн сонсоход)' : '1.0x Хэвийн'}
                   </button>
+
+                  {activeJob && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void downloadAuthedFile(
+                          `/api/audio/${scope}/${encodeURIComponent(activeJob.filename)}`,
+                          activeJob.filename
+                        )
+                      }
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>WAV татах</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
                 <Volume2 className="w-6 h-6 text-slate-400 mx-auto" aria-hidden="true" />
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Энэ өгүүлбэрт WAV файл үүсээгүй байна.
+                  {audioLoadError ??
+                    (scope === 'real'
+                      ? 'Энэ өгүүлбэрт бодит WAV файл үүсээгүй байна.'
+                      : 'Энэ өгүүлбэрт MOCK WAV файл үүсээгүй байна.')}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Үйлдвэрлэл хэсгээс аудио үүсгэсний дараа энд тоглуулж шалгана уу.

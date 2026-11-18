@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import firebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
 import {
   CANONICAL_CURRICULUM_SHA256,
   CANONICAL_DATASET_VERSION,
@@ -8,32 +9,41 @@ import {
 } from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
+  DriveSelection,
   ErrorLogEntry,
   EventLogEntry,
   QaRecord,
   SourceRow,
 } from '../shared/types';
+import { getAdcAccessToken } from './vertexTts';
 
 export interface PersistedStore {
   canonical_curriculum_sha256: string;
   dataset_version: string;
   sources: SourceRow[];
-  jobs: Record<string, AudioJobReceipt>;
+  real_jobs: Record<string, AudioJobReceipt>;
+  mock_jobs: Record<string, AudioJobReceipt>;
   qa: Record<string, QaRecord>;
   events: EventLogEntry[];
   errors: ErrorLogEntry[];
+  drive: DriveSelection;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
-const AUDIO_DIR = path.join(DATA_DIR, 'audio');
+const REAL_AUDIO_DIR = path.join(DATA_DIR, 'audio', 'real');
+const MOCK_AUDIO_DIR = path.join(DATA_DIR, 'audio', 'mock');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
+export const FIRESTORE_DATABASE_ID =
+  process.env.FIRESTORE_DATABASE_ID?.trim() ||
+  (firebaseConfig as any).firestoreDatabaseId ||
+  '(default)';
+
 function ensureDirs() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(AUDIO_DIR)) {
-    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+  for (const dir of [DATA_DIR, REAL_AUDIO_DIR, MOCK_AUDIO_DIR]) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 }
 
@@ -54,43 +64,57 @@ function buildInitialQaMap(sources: SourceRow[]): Record<string, QaRecord> {
   return qa;
 }
 
+function defaultStore(): PersistedStore {
+  return {
+    canonical_curriculum_sha256: CANONICAL_CURRICULUM_SHA256,
+    dataset_version: CANONICAL_DATASET_VERSION,
+    sources: SEED_FIRST_FIVE_ROWS,
+    real_jobs: {},
+    mock_jobs: {},
+    qa: buildInitialQaMap(SEED_FIRST_FIVE_ROWS),
+    events: [],
+    errors: [],
+    drive: {
+      folder_id: null,
+      folder_name: null,
+      last_synced_at: null,
+      uploaded_files: [],
+    },
+  };
+}
+
 export function loadStore(): PersistedStore {
   ensureDirs();
   if (!fs.existsSync(STATE_FILE)) {
-    const initial: PersistedStore = {
-      canonical_curriculum_sha256: CANONICAL_CURRICULUM_SHA256,
-      dataset_version: CANONICAL_DATASET_VERSION,
-      sources: SEED_FIRST_FIVE_ROWS,
-      jobs: {},
-      qa: buildInitialQaMap(SEED_FIRST_FIVE_ROWS),
-      events: [],
-      errors: [],
-    };
+    const initial = defaultStore();
     saveStore(initial);
     return initial;
   }
 
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as PersistedStore;
-    if (!Array.isArray(parsed.sources) || parsed.sources.length === 0) {
-      parsed.sources = SEED_FIRST_FIVE_ROWS;
+    const parsed = JSON.parse(raw) as Partial<PersistedStore> & { jobs?: Record<string, AudioJobReceipt> };
+    const store = defaultStore();
+    if (Array.isArray(parsed.sources) && parsed.sources.length > 0) {
+      store.sources = parsed.sources;
     }
-    parsed.jobs = parsed.jobs ?? {};
-    parsed.qa = parsed.qa ?? buildInitialQaMap(parsed.sources);
-    parsed.events = parsed.events ?? [];
-    parsed.errors = parsed.errors ?? [];
-    return parsed;
+    store.dataset_version = parsed.dataset_version ?? CANONICAL_DATASET_VERSION;
+    store.real_jobs = parsed.real_jobs ?? {};
+    store.mock_jobs = parsed.mock_jobs ?? {};
+    // Migrate legacy single jobs map cleanly without mixing mock into real
+    if (parsed.jobs && !parsed.real_jobs && !parsed.mock_jobs) {
+      for (const [k, job] of Object.entries(parsed.jobs)) {
+        if (job.is_mock) store.mock_jobs[k] = job;
+        else if (job.status === 'REAL_SUCCESS') store.real_jobs[k] = job;
+      }
+    }
+    store.qa = parsed.qa ?? buildInitialQaMap(store.sources);
+    store.events = parsed.events ?? [];
+    store.errors = parsed.errors ?? [];
+    store.drive = parsed.drive ?? store.drive;
+    return store;
   } catch {
-    const fallback: PersistedStore = {
-      canonical_curriculum_sha256: CANONICAL_CURRICULUM_SHA256,
-      dataset_version: CANONICAL_DATASET_VERSION,
-      sources: SEED_FIRST_FIVE_ROWS,
-      jobs: {},
-      qa: buildInitialQaMap(SEED_FIRST_FIVE_ROWS),
-      events: [],
-      errors: [],
-    };
+    const fallback = defaultStore();
     saveStore(fallback);
     return fallback;
   }
@@ -103,19 +127,26 @@ export function saveStore(store: PersistedStore): void {
   fs.renameSync(tmpFile, STATE_FILE);
 }
 
-export function getAudioFilePath(filename: string): string {
+/**
+ * Strictly isolated path resolver: MOCK and REAL audio files NEVER share a directory or filename path.
+ */
+export function getAudioFilePath(scope: 'real' | 'mock', filename: string): string {
   ensureDirs();
   const safeName = path.basename(filename);
-  return path.join(AUDIO_DIR, safeName);
+  return path.join(scope === 'real' ? REAL_AUDIO_DIR : MOCK_AUDIO_DIR, safeName);
 }
 
-export function writeAudioFile(filename: string, bytes: Uint8Array): {
+export function writeScopedAudioFile(
+  scope: 'real' | 'mock',
+  filename: string,
+  bytes: Uint8Array
+): {
   fullPath: string;
   sha256: string;
   byteLength: number;
 } {
   ensureDirs();
-  const fullPath = getAudioFilePath(filename);
+  const fullPath = getAudioFilePath(scope, filename);
   fs.writeFileSync(fullPath, bytes);
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
   return {
@@ -125,8 +156,12 @@ export function writeAudioFile(filename: string, bytes: Uint8Array): {
   };
 }
 
-export function verifyPhysicalAudioFile(filename: string, expectedSha256?: string | null): boolean {
-  const fullPath = getAudioFilePath(filename);
+export function verifyScopedAudioFile(
+  scope: 'real' | 'mock',
+  filename: string,
+  expectedSha256?: string | null
+): boolean {
+  const fullPath = getAudioFilePath(scope, filename);
   if (!fs.existsSync(fullPath)) return false;
   if (!expectedSha256) return true;
   const bytes = fs.readFileSync(fullPath);
@@ -134,14 +169,14 @@ export function verifyPhysicalAudioFile(filename: string, expectedSha256?: strin
   return actual === expectedSha256;
 }
 
-export function readAudioFile(filename: string): Buffer | null {
-  const fullPath = getAudioFilePath(filename);
+export function readScopedAudioFile(scope: 'real' | 'mock', filename: string): Buffer | null {
+  const fullPath = getAudioFilePath(scope, filename);
   if (!fs.existsSync(fullPath)) return null;
   return fs.readFileSync(fullPath);
 }
 
-export function deleteAudioFile(filename: string): void {
-  const fullPath = getAudioFilePath(filename);
+export function deleteScopedAudioFile(scope: 'real' | 'mock', filename: string): void {
+  const fullPath = getAudioFilePath(scope, filename);
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath);
   }
@@ -171,4 +206,49 @@ export function appendError(
   };
   store.errors = [entry, ...store.errors].slice(0, 200);
   return entry;
+}
+
+/**
+ * Syncs server state snapshot to Firestore REST API when Cloud Run ADC is available.
+ * Never relies on ephemeral Cloud Run disk as the sole source of truth in production.
+ */
+export async function syncSnapshotToFirestoreAdc(
+  store: PersistedStore,
+  ownerUid: string
+): Promise<boolean> {
+  try {
+    const token = await getAdcAccessToken();
+    const projectId = firebaseConfig.projectId || 'project-a699c3ff-995a-4b88-add';
+    const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+      projectId
+    )}/databases/${encodeURIComponent(FIRESTORE_DATABASE_ID)}/documents`;
+
+    const metaBody = {
+      fields: {
+        dataset_version: { stringValue: store.dataset_version },
+        canonical_curriculum_sha256: { stringValue: store.canonical_curriculum_sha256 },
+        drive_folder_id: store.drive.folder_id
+          ? { stringValue: store.drive.folder_id }
+          : { nullValue: null },
+        drive_folder_name: store.drive.folder_name
+          ? { stringValue: store.drive.folder_name }
+          : { nullValue: null },
+        ownerUid: { stringValue: ownerUid },
+        updatedAt: { stringValue: new Date().toISOString() },
+      },
+    };
+
+    const res = await fetch(`${baseUrl}/factory_meta/config`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(metaBody),
+    });
+
+    return res.ok;
+  } catch {
+    return false;
+  }
 }

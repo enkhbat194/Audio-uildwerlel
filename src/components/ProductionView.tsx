@@ -1,13 +1,17 @@
 import {
   AlertTriangle,
+  CheckCircle2,
+  Download,
   Headphones,
+  Lock,
   Pause,
   Play,
   RotateCcw,
   ShieldAlert,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { authedFetch, downloadAuthedFile } from '../lib/apiClient';
 import type {
   AudioJobReceipt,
   CloudRuntimeStatus,
@@ -16,9 +20,12 @@ import type {
 } from '../shared/types';
 import { JobStatusLabel } from './StatusBadge';
 
+const FIRST_PILOT_ID = 'CZ-A0-M01-L01-PH001';
+
 interface ProductionViewProps {
   sources: SourceRow[];
-  jobs: Record<string, AudioJobReceipt>;
+  realJobs: Record<string, AudioJobReceipt>;
+  mockJobs: Record<string, AudioJobReceipt>;
   mode: ExecutionMode;
   runtime: CloudRuntimeStatus;
   selectedVoice: string;
@@ -29,7 +36,7 @@ interface ProductionViewProps {
   confirmModalOpen: boolean;
   onOpenConfirmModal: () => void;
   onCloseConfirmModal: () => void;
-  onRunBatch: (ackPrivateTest: boolean) => void;
+  onRunBatch: (ackPrivateTest: boolean, onlyFirstRow?: boolean) => void;
   onPauseBatch: () => void;
   onResetMock: () => Promise<void>;
   onGoToQa: (sourceId: string) => void;
@@ -37,7 +44,8 @@ interface ProductionViewProps {
 
 export function ProductionView({
   sources,
-  jobs,
+  realJobs,
+  mockJobs,
   mode,
   runtime,
   selectedVoice,
@@ -55,14 +63,59 @@ export function ProductionView({
 }: ProductionViewProps) {
   const [ackPrivateTest, setAckPrivateTest] = useState(false);
   const [speedTab, setSpeedTab] = useState<'normal' | 'slow'>('normal');
+  const [ph001BlobUrl, setPh001BlobUrl] = useState<string | null>(null);
 
+  const activeJobs = mode === 'mock' ? mockJobs : realJobs;
   const queueRows = sources.slice(0, runtime.max_first_batch);
-  const hasHoldFlag = queueRows.some((r) => r.source_gate === 'BLOCK_DOMAIN');
+
+  const isFirstRealGateActive = mode === 'vertex' && !runtime.first_real_wav_verified;
+  const effectiveRowsToRun = isFirstRealGateActive
+    ? queueRows.filter((r) => r.source_id === FIRST_PILOT_ID)
+    : queueRows;
+
+  const hasHoldFlag = effectiveRowsToRun.some((r) => r.source_gate === 'BLOCK_DOMAIN');
   const completedCount = queueRows.filter((r) => {
-    const j = jobs[r.source_id];
+    const j = activeJobs[r.source_id];
     return j && (j.status === 'REAL_SUCCESS' || j.status === 'MOCK');
   }).length;
-  const mockPresent = Object.values(jobs).some((j) => j.is_mock);
+  const mockPresent = Object.keys(mockJobs).length > 0;
+
+  const ph001RealJob = realJobs[FIRST_PILOT_ID];
+  const ph001Verified = Boolean(
+    ph001RealJob && ph001RealJob.status === 'REAL_SUCCESS' && !ph001RealJob.is_mock
+  );
+
+  useEffect(() => {
+    let active = true;
+    let currentUrl: string | null = null;
+
+    async function loadPh001Audio() {
+      if (!ph001Verified || !ph001RealJob?.filename) {
+        setPh001BlobUrl(null);
+        return;
+      }
+      try {
+        const res = await authedFetch(
+          `/api/audio/real/${encodeURIComponent(ph001RealJob.filename)}?v=${encodeURIComponent(
+            ph001RealJob.updated_at
+          )}`
+        );
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (!active) return;
+        currentUrl = URL.createObjectURL(blob);
+        setPh001BlobUrl(currentUrl);
+      } catch {
+        // Ignore preview fetch failure
+      }
+    }
+
+    void loadPh001Audio();
+    return () => {
+      active = false;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
+  }, [ph001Verified, ph001RealJob?.filename, ph001RealJob?.updated_at]);
 
   return (
     <div className="space-y-6">
@@ -72,7 +125,7 @@ export function ProductionView({
             Үйлдвэрлэл (Эхний 5 эгнээ)
           </h1>
           <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-            Дараалал: concurrency=1 · Ижил fingerprint/SHA256 баталгаажсан мөрийг дахин дуудахгүй алгасна.
+            Дараалал: concurrency=1 · {mode === 'mock' ? 'MOCK ба Real зам тусдаа' : 'Эхлээд PH001 — 1 бодит WAV баталгаажуулна'}.
           </p>
         </div>
 
@@ -107,11 +160,57 @@ export function ProductionView({
               className="min-h-[44px] px-5 py-2.5 rounded-xl bg-sky-700 hover:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-sm font-semibold flex items-center gap-2 cursor-pointer whitespace-nowrap"
             >
               <Play className="w-4 h-4" aria-hidden="true" />
-              <span>5 аудио үүсгэх</span>
+              <span>
+                {isFirstRealGateActive
+                  ? '1 бодит WAV (PH001) үүсгэх'
+                  : mode === 'mock'
+                  ? 'MOCK 5 аудио үүсгэх'
+                  : 'Үлдсэн бодит WAV үүсгэх'}
+              </span>
             </button>
           )}
         </div>
       </div>
+
+      {/* Verified PH001 Real WAV Inspection Card */}
+      {ph001Verified && ph001RealJob && (
+        <section className="bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-sm font-bold text-emerald-950 dark:text-emerald-200">
+                  PH001 — Dobrý den. (Эхний бодит WAV баталгаажлаа)
+                </h2>
+                <p className="text-xs font-mono text-emerald-800 dark:text-emerald-300 mt-0.5 tabular-nums">
+                  HTTP {ph001RealJob.http_status} · {ph001RealJob.duration_ms} ms ·{' '}
+                  {ph001RealJob.file_size ? `${(ph001RealJob.file_size / 1024).toFixed(1)} KB` : '—'} ·{' '}
+                  {ph001RealJob.storage_ref}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                void downloadAuthedFile(
+                  `/api/audio/real/${encodeURIComponent(ph001RealJob.filename)}`,
+                  ph001RealJob.filename
+                )
+              }
+              className="min-h-[40px] px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>PH001 WAV татах</span>
+            </button>
+          </div>
+
+          <p className="text-xs font-mono text-emerald-900 dark:text-emerald-300 break-all">
+            SHA256: {ph001RealJob.audio_sha256}
+          </p>
+
+          {ph001BlobUrl && <audio controls src={ph001BlobUrl} className="w-full" />}
+        </section>
+      )}
 
       {/* Voice & Speed Profile Settings Panel */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -177,7 +276,7 @@ export function ProductionView({
             />
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-mono tabular-nums">
-            Горим: {mode === 'mock' ? 'MOCK (Синтетик тест)' : runtime.vertex_connected ? 'REAL VERTEX AI' : 'NOT_CONNECTED'} · Max batch: {runtime.max_first_batch}
+            Горим: {mode === 'mock' ? 'MOCK (Тусгаарлагдсан)' : runtime.vertex_connected ? 'REAL VERTEX AI' : 'NOT_CONNECTED'} · Max batch: {runtime.max_first_batch}
           </p>
         </div>
       </section>
@@ -185,8 +284,9 @@ export function ProductionView({
       {/* Queue Rows */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800">
         {queueRows.map((row) => {
-          const job = jobs[row.source_id];
+          const job = activeJobs[row.source_id];
           const isRunning = activeRowId === row.source_id;
+          const lockedBehindPh001 = isFirstRealGateActive && row.source_id !== FIRST_PILOT_ID;
           const displayStatus = isRunning
             ? 'RUNNING'
             : job?.status ?? (runtime.vertex_connected || mode === 'mock' ? 'PENDING' : 'NOT_CONNECTED');
@@ -195,7 +295,9 @@ export function ProductionView({
           return (
             <div
               key={row.source_id}
-              className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+              className={`p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                lockedBehindPh001 ? 'opacity-70' : ''
+              }`}
             >
               <div className="space-y-1.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
@@ -207,6 +309,15 @@ export function ProductionView({
                       <span aria-hidden="true">·</span>
                       <span className="font-sans font-semibold text-red-700 dark:text-red-400">
                         BLOCK_DOMAIN (Дотоод тест)
+                      </span>
+                    </>
+                  )}
+                  {lockedBehindPh001 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-sans font-semibold text-slate-600 dark:text-slate-400 inline-flex items-center gap-1">
+                        <Lock className="w-3 h-3" aria-hidden="true" />
+                        <span>PH001 эхэлж баталгаажуулна</span>
                       </span>
                     </>
                   )}
@@ -228,6 +339,12 @@ export function ProductionView({
                   <span>Оролдлого: {job?.attempts ?? 0}</span>
                   <span aria-hidden="true">·</span>
                   <span>Хугацаа: {job?.duration_ms ? `${job.duration_ms} ms` : '—'}</span>
+                  {job?.file_size && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{(job.file_size / 1024).toFixed(1)} KB</span>
+                    </>
+                  )}
                 </div>
 
                 {job?.last_error && (
@@ -235,18 +352,35 @@ export function ProductionView({
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 shrink-0">
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
                 <JobStatusLabel status={displayStatus} />
 
-                {playable && (
-                  <button
-                    type="button"
-                    onClick={() => onGoToQa(row.source_id)}
-                    className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                  >
-                    <Headphones className="w-4 h-4" aria-hidden="true" />
-                    <span>Сонсох / QA</span>
-                  </button>
+                {playable && job && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void downloadAuthedFile(
+                          `/api/audio/${job.is_mock ? 'mock' : 'real'}/${encodeURIComponent(
+                            job.filename
+                          )}`,
+                          job.filename
+                        )
+                      }
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Татах</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onGoToQa(row.source_id)}
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <Headphones className="w-4 h-4" aria-hidden="true" />
+                      <span>Сонсох / QA</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -267,7 +401,9 @@ export function ProductionView({
               <h2 id="batch-confirm-title" className="text-lg font-bold text-slate-900 dark:text-slate-50">
                 {mode === 'mock'
                   ? 'Тестийн (MOCK) 5 WAV үүсгэх баталгаажуулалт'
-                  : 'Бодит Vertex AI TTS дуудлага баталгаажуулах'}
+                  : isFirstRealGateActive
+                  ? 'Эхний 1 бодит WAV (PH001 — Dobrý den.) баталгаажуулах'
+                  : 'Үлдсэн бодит Vertex AI TTS дуудлага баталгаажуулах'}
               </h2>
               <button
                 type="button"
@@ -283,21 +419,26 @@ export function ProductionView({
               <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-start gap-3">
                 <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="text-xs md:text-sm text-amber-950 dark:text-amber-200 space-y-1.5">
-                  <p className="font-semibold">Vertex AI: ТОХИРУУЛААГҮЙ (ADC олдсонгүй)</p>
+                  <p className="font-semibold">Vertex AI: ТОХИРУУЛААГҮЙ (ADC / IAM эрх баталгаажаагүй)</p>
                   <p>
-                    Одоогийн preview орчинд Cloud Run service account эрх байхгүй тул бодит хүсэлт илгээх боломжгүй. Файлууд / Тохиргоо хуудаснаас Cloud Run зааврыг харах эсвэл дээрх горим сонгогчоос <strong>Тестийн горим (MOCK)</strong>-г сонгоно уу.
+                    {runtime.adc_error ??
+                      'Одоогийн орчинд project-a699c3ff-995a-4b88-add төслийн service account болон aiplatform.endpoints.predict эрх баталгаажаагүй тул бодит хүсэлт илгээхгүй.'}
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
                 <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1 font-mono">
-                  <p>Мөрийн тоо: max={queueRows.length} · Хоолой: {selectedVoice} · Хурд: Normal</p>
+                  <p>
+                    Мөрийн тоо: {effectiveRowsToRun.length} · Хоолой: {selectedVoice} · Хурд: Normal
+                  </p>
                   <p>
                     Горим:{' '}
                     {mode === 'mock'
-                      ? 'Тестийн горим (Төлбөргүй синтетик MOCK WAV)'
-                      : `Бодит Vertex AI (${runtime.project_id}) — төлбөртэй хүсэлт`}
+                      ? 'Тестийн горим (Төлбөргүй синтетик MOCK WAV, бодит санд нөлөөлөхгүй)'
+                      : isFirstRealGateActive
+                      ? `Бодит Vertex AI (${runtime.project_id}) — эхлээд зөвхөн PH001 (1 дуудлага)`
+                      : `Бодит Vertex AI (${runtime.project_id}) — PH001 баталгаажсан тул үлдсэн мөрүүд`}
                   </p>
                 </div>
 
@@ -337,10 +478,10 @@ export function ProductionView({
                 <button
                   type="button"
                   disabled={hasHoldFlag && !ackPrivateTest}
-                  onClick={() => onRunBatch(ackPrivateTest)}
+                  onClick={() => onRunBatch(ackPrivateTest, isFirstRealGateActive)}
                   className="min-h-[44px] px-5 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-40 text-white text-sm font-semibold cursor-pointer"
                 >
-                  Багцыг эхлүүлэх
+                  {isFirstRealGateActive ? 'PH001 (1 WAV) эхлүүлэх' : 'Багцыг эхлүүлэх'}
                 </button>
               )}
             </div>

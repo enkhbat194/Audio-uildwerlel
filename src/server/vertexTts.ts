@@ -1,4 +1,5 @@
 import { GoogleAuth } from 'google-auth-library';
+import firebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
 import { parseWavHeader, wrapPcm16ToWav } from '../shared/audioAndCrypto';
 import {
   VERTEX_ENDPOINT,
@@ -8,6 +9,7 @@ import {
   VERTEX_VOICE,
 } from '../shared/sourceRegistry';
 import type { CloudRuntimeStatus } from '../shared/types';
+import { getOwnerAllowlist } from './auth';
 
 let cachedRuntimeCheck: { status: CloudRuntimeStatus; checkedAt: number } | null = null;
 
@@ -31,19 +33,61 @@ async function fetchMetadataIdentity(pathSuffix: string, timeoutMs = 800): Promi
   }
 }
 
-export async function probeCloudRuntimeStatus(forceRefresh = false): Promise<CloudRuntimeStatus> {
+/**
+ * Verifies real IAM permission on project-a699c3ff-995a-4b88-add before reporting CONNECTED.
+ */
+async function verifyVertexIamPermissions(token: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(
+      `https://cloudresourcemanager.googleapis.com/v1/projects/${VERTEX_PROJECT_ID}:testIamPermissions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          permissions: ['aiplatform.endpoints.predict'],
+        }),
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timer);
+    if (!res.ok) return false;
+    const data = (await res.json()) as { permissions?: string[] };
+    return Array.isArray(data.permissions) && data.permissions.includes('aiplatform.endpoints.predict');
+  } catch {
+    return false;
+  }
+}
+
+export async function probeCloudRuntimeStatus(
+  forceRefresh = false,
+  firstRealWavVerified = false
+): Promise<CloudRuntimeStatus> {
   const now = Date.now();
   if (!forceRefresh && cachedRuntimeCheck && now - cachedRuntimeCheck.checkedAt < 30_000) {
-    return cachedRuntimeCheck.status;
+    return {
+      ...cachedRuntimeCheck.status,
+      first_real_wav_verified: firstRealWavVerified,
+    };
   }
 
-  const gcsBucket = process.env.GCS_BUCKET_NAME?.trim() || null;
-  const ownerEmail = process.env.OWNER_EMAIL_ALLOWLIST?.split(',')[0]?.trim() || null;
-  const authMode: 'preview-local' | 'iap-or-allowlist' = process.env.OWNER_EMAIL_ALLOWLIST
-    ? 'iap-or-allowlist'
-    : 'preview-local';
+  const gcsBucket =
+    process.env.GCS_BUCKET_NAME?.trim() ||
+    (firebaseConfig as any).storageBucket?.trim() ||
+    null;
+  const firestoreDbId =
+    process.env.FIRESTORE_DATABASE_ID?.trim() ||
+    (firebaseConfig as any).firestoreDatabaseId ||
+    '(default)';
+  const iapEnabled = Boolean(process.env.IAP_AUDIENCE?.trim() || process.env.REQUIRE_IAP === 'true');
+  const ownerAllowlist = getOwnerAllowlist();
 
   let adcAvailable = false;
+  let permissionVerified = false;
   let runtimeIdentity: string | null = null;
   let adcError: string | null = null;
 
@@ -59,18 +103,21 @@ export async function probeCloudRuntimeStatus(forceRefresh = false): Promise<Clo
 
     if (isAiStudioSandbox || (!projectMatches && !process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
       adcAvailable = false;
+      permissionVerified = false;
       runtimeIdentity = null;
       adcError =
-        'AI Studio preview орчинд байна. project-a699c3ff-995a-4b88-add төслийн Cloud Run Workload Identity (ADC) холбогдоогүй.';
+        'AI Studio preview орчинд байна. project-a699c3ff-995a-4b88-add төслийн Cloud Run Workload Identity (ADC) байхгүй.';
     } else {
       const auth = new GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       });
+      let acquiredToken: string | null = null;
       const probePromise = (async () => {
         const client = await auth.getClient();
         const tokenRes = await client.getAccessToken();
         if (tokenRes && tokenRes.token) {
           adcAvailable = true;
+          acquiredToken = tokenRes.token;
         }
       })();
 
@@ -80,13 +127,19 @@ export async function probeCloudRuntimeStatus(forceRefresh = false): Promise<Clo
 
       await Promise.race([probePromise, timeoutPromise]);
 
-      if (adcAvailable) {
+      if (adcAvailable && acquiredToken) {
         runtimeIdentity =
           saEmail ?? process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? 'Cloud Run ADC Identity';
+        permissionVerified = await verifyVertexIamPermissions(acquiredToken);
+        if (!permissionVerified) {
+          adcError =
+            'ADC токен олдсон боловч project-a699c3ff-995a-4b88-add дээр aiplatform.endpoints.predict эрх баталгаажсангүй.';
+        }
       }
     }
   } catch (err) {
     adcAvailable = false;
+    permissionVerified = false;
     adcError =
       err instanceof Error && err.message === 'ADC_METADATA_TIMEOUT'
         ? 'Cloud Run Workload Identity / ADC олдсонгүй (AI Studio preview орчин).'
@@ -101,19 +154,21 @@ export async function probeCloudRuntimeStatus(forceRefresh = false): Promise<Clo
     model: VERTEX_MODEL,
     voice: VERTEX_VOICE,
     endpoint: VERTEX_ENDPOINT,
-    vertex_connected: adcAvailable,
+    vertex_connected: adcAvailable && permissionVerified,
+    vertex_permission_verified: permissionVerified,
     adc_available: adcAvailable,
     runtime_identity: runtimeIdentity,
-    storage_backend: gcsBucket && adcAvailable ? 'gcs-private-bucket' : 'local-preview',
+    storage_backend: gcsBucket && adcAvailable ? 'gcs-private-bucket' : 'local-preview-ephemeral',
     gcs_bucket: gcsBucket,
-    firestore_connected: Boolean(process.env.FIRESTORE_DATABASE_ID && adcAvailable),
-    drive_connected: false,
-    drive_folder_name: null,
-    auth_mode: authMode,
-    owner_email: ownerEmail,
+    firestore_connected: Boolean(firestoreDbId),
+    firestore_database_id: firestoreDbId,
+    iap_enabled: iapEnabled,
+    auth_mode: 'iap-and-firebase-jwt',
+    owner_allowlist: ownerAllowlist,
     estimated_cost_label: 'Тооцоолоогүй',
     rate_limit_rpm: Number(process.env.TTS_RATE_LIMIT_RPM ?? 10),
     max_first_batch: 5,
+    first_real_wav_verified: firstRealWavVerified,
     adc_error: adcError,
   };
 
@@ -140,7 +195,9 @@ export async function uploadToGcsPrivateBucket(
   contentType = 'audio/wav'
 ): Promise<string> {
   const token = await getAdcAccessToken();
-  const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName)}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+  const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(
+    bucketName
+  )}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -154,6 +211,26 @@ export async function uploadToGcsPrivateBucket(
     throw new Error(`GCS upload алдаа (${res.status}): ${errText.slice(0, 200)}`);
   }
   return `gs://${bucketName}/${objectName}`;
+}
+
+export async function downloadFromGcsPrivateBucket(
+  bucketName: string,
+  objectName: string
+): Promise<Buffer | null> {
+  try {
+    const token = await getAdcAccessToken();
+    const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(
+      bucketName
+    )}/o/${encodeURIComponent(objectName)}?alt=media`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const arr = await res.arrayBuffer();
+    return Buffer.from(arr);
+  } catch {
+    return null;
+  }
 }
 
 export interface VertexTtsCallResult {
@@ -187,9 +264,7 @@ export async function callVertexTtsWithRetry(
       attempts: 0,
       errorCode: 'VERTEX_ADC_NOT_CONFIGURED',
       errorMessage:
-        err instanceof Error
-          ? err.message
-          : 'Vertex AI ADC эрх тохируулаагүй байна.',
+        err instanceof Error ? err.message : 'Vertex AI ADC эрх тохируулаагүй байна.',
     };
   }
 
@@ -239,11 +314,8 @@ export async function callVertexTtsWithRetry(
     }
 
     const requestId =
-      res.headers.get('x-guploader-uploadid') ??
-      res.headers.get('x-request-id') ??
-      null;
+      res.headers.get('x-guploader-uploadid') ?? res.headers.get('x-request-id') ?? null;
 
-    // 401/403 must stop immediately without retry
     if (res.status === 401 || res.status === 403) {
       const bodyText = await res.text();
       return {
@@ -252,11 +324,10 @@ export async function callVertexTtsWithRetry(
         providerRequestId: requestId,
         attempts,
         errorCode: 'AUTH_OR_IAM_DENIED',
-        errorMessage: `Vertex AI эрхийн алдаа (${res.status}): Cloud Run service account-д Vertex AI User эрх шаардлагатай. ${bodyText.slice(0, 180)}`,
+        errorMessage: `Vertex AI эрхийн алдаа (${res.status}): Service account дээр Vertex AI User эрх шаардлагатай. ${bodyText.slice(0, 180)}`,
       };
     }
 
-    // 429 or 5xx: retry with exponential backoff + Retry-After
     if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
       const retryAfterHeader = res.headers.get('retry-after');
       const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
@@ -280,7 +351,6 @@ export async function callVertexTtsWithRetry(
       };
     }
 
-    // Parse Vertex JSON response and validate actual audio payload
     let jsonBody: any;
     try {
       jsonBody = await res.json();

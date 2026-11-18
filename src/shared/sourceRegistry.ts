@@ -470,13 +470,15 @@ export function generateErrorsCsv(errors: ErrorLogEntry[]): string {
 
 export function generateSummaryJson(
   sources: SourceRow[],
-  jobs: Record<string, AudioJobReceipt>,
+  realJobs: Record<string, AudioJobReceipt>,
+  mockJobs: Record<string, AudioJobReceipt>,
   qaMap: Record<string, QaRecord>
 ): string {
-  const jobList = Object.values(jobs);
-  const realCount = jobList.filter((j) => j.status === 'REAL_SUCCESS' && !j.is_mock).length;
-  const mockCount = jobList.filter((j) => j.is_mock && j.status === 'MOCK').length;
-  const failedCount = jobList.filter((j) => j.status === 'FAILED').length;
+  const realList = Object.values(realJobs);
+  const mockList = Object.values(mockJobs);
+  const realCount = realList.filter((j) => j.status === 'REAL_SUCCESS' && !j.is_mock).length;
+  const mockCount = mockList.filter((j) => j.is_mock && j.status === 'MOCK').length;
+  const failedCount = realList.filter((j) => j.status === 'FAILED').length;
   const qaPass = Object.values(qaMap).filter((q) => q.listening_qa === 'PASS').length;
   const qaReview = Object.values(qaMap).filter((q) => q.listening_qa === 'REVIEW').length;
   const qaFail = Object.values(qaMap).filter((q) => q.listening_qa === 'FAIL').length;

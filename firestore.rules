@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isVerifiedOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'zazadada8899@gmail.com';
+    }
+
+    function isValidMeta(data) {
+      return data.keys().hasAll(['dataset_version', 'canonical_curriculum_sha256', 'ownerUid', 'updatedAt'])
+        && data.keys().hasOnly(['dataset_version', 'canonical_curriculum_sha256', 'drive_folder_id', 'drive_folder_name', 'ownerUid', 'updatedAt'])
+        && data.ownerUid == request.auth.uid
+        && data.dataset_version is string && data.dataset_version.size() <= 32
+        && data.canonical_curriculum_sha256 is string && data.canonical_curriculum_sha256.size() == 64
+        && data.updatedAt is string && data.updatedAt.size() <= 64
+        && (!('drive_folder_id' in data) || data.drive_folder_id == null || (data.drive_folder_id is string && data.drive_folder_id.size() <= 128))
+        && (!('drive_folder_name' in data) || data.drive_folder_name == null || (data.drive_folder_name is string && data.drive_folder_name.size() <= 256));
+    }
+
+    function isValidSource(data) {
+      return data.keys().hasAll(['source_id', 'lesson_id', 'cs_exact', 'text_sha256', 'dataset_version', 'source_gate', 'publish_allowed', 'ownerUid'])
+        && data.keys().hasOnly(['pilot_order', 'source_id', 'lesson_id', 'cs_exact', 'text_sha256', 'audio_text_key', 'dataset_version', 'locale', 'source_type', 'source_gate', 'source_safe_to_submit', 'publish_allowed', 'source_match_count', 'notes', 'ownerUid', 'updatedAt'])
+        && data.ownerUid == request.auth.uid
+        && data.source_id is string && data.source_id.size() <= 64
+        && data.lesson_id is string && data.lesson_id.size() <= 64
+        && data.cs_exact is string && data.cs_exact.size() <= 500
+        && data.text_sha256 is string && data.text_sha256.size() == 64
+        && data.dataset_version is string && data.dataset_version.size() <= 32
+        && data.source_gate is string && data.source_gate.size() <= 64
+        && data.publish_allowed is bool
+        && (data.source_gate != 'BLOCK_DOMAIN' || data.publish_allowed == false);
+    }
+
+    function isValidJob(data, expectedMock, expectedProvider) {
+      return data.keys().hasAll(['source_id', 'dataset_version', 'cs_exact_sha256', 'fingerprint', 'filename', 'provider', 'model', 'voice', 'speed_profile', 'status', 'is_mock', 'ownerUid', 'created_at', 'updated_at'])
+        && data.keys().hasOnly(['source_id', 'dataset_version', 'cs_exact_sha256', 'fingerprint', 'filename', 'provider', 'model', 'voice', 'speed_profile', 'status', 'is_mock', 'http_status', 'provider_request_id', 'attempts', 'last_error', 'audio_sha256', 'sample_rate', 'channels', 'bit_depth', 'duration_ms', 'file_size', 'peak_dbfs', 'rms_dbfs', 'format', 'storage_ref', 'storage_backend', 'stale', 'ownerUid', 'created_at', 'updated_at'])
+        && data.ownerUid == request.auth.uid
+        && data.is_mock == expectedMock
+        && data.provider == expectedProvider
+        && data.source_id is string && data.source_id.size() <= 64
+        && data.dataset_version is string && data.dataset_version.size() <= 32
+        && data.cs_exact_sha256 is string && data.cs_exact_sha256.size() == 64
+        && data.fingerprint is string && data.fingerprint.size() == 64
+        && data.filename is string && data.filename.size() <= 256
+        && data.model is string && data.model.size() <= 64
+        && data.voice is string && data.voice.size() <= 64
+        && data.speed_profile in ['normal', 'slow']
+        && data.status is string && data.status.size() <= 32
+        && data.created_at is string && data.created_at.size() <= 64
+        && data.updated_at is string && data.updated_at.size() <= 64;
+    }
+
+    function isValidQa(data) {
+      return data.keys().hasAll(['source_id', 'listening_qa', 'publication_gate', 'ownerUid', 'updated_at'])
+        && data.keys().hasOnly(['source_id', 'listening_qa', 'publication_gate', 'issue_category', 'notes', 'reviewer', 'ownerUid', 'updated_at'])
+        && data.ownerUid == request.auth.uid
+        && data.source_id is string && data.source_id.size() <= 64
+        && data.listening_qa in ['QA_PENDING', 'PASS', 'REVIEW', 'FAIL']
+        && data.publication_gate in ['BLOCKED_FOR_RELEASE', 'INTERNAL_PILOT_ONLY']
+        && (!('issue_category' in data) || (data.issue_category is string && data.issue_category.size() <= 64))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000))
+        && (!('reviewer' in data) || (data.reviewer is string && data.reviewer.size() <= 128))
+        && data.updated_at is string && data.updated_at.size() <= 64;
+    }
+
+    function isValidAudit(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'source_id', 'ownerUid'])
+        && data.keys().hasOnly(['id', 'timestamp', 'event_type', 'source_id', 'mode', 'detail', 'http_status', 'code', 'message', 'ownerUid'])
+        && data.ownerUid == request.auth.uid
+        && data.id is string && data.id.size() <= 64
+        && data.timestamp is string && data.timestamp.size() <= 64
+        && data.source_id is string && data.source_id.size() <= 64;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /test/{docId} {
+      allow get: if isVerifiedOwner() && isValidId(docId);
+    }
+
+    match /factory_meta/{metaId} {
+      allow get: if isVerifiedOwner() && isValidId(metaId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(metaId) && isValidMeta(incoming());
+      allow update: if isVerifiedOwner() && isValidId(metaId) && isValidMeta(incoming())
+        && incoming().ownerUid == existing().ownerUid;
+    }
+
+    match /sources/{sourceId} {
+      allow get: if isVerifiedOwner() && isValidId(sourceId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(sourceId) && isValidSource(incoming());
+      allow update: if isVerifiedOwner() && isValidId(sourceId) && isValidSource(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().source_id == existing().source_id;
+    }
+
+    match /real_jobs/{sourceId} {
+      allow get: if isVerifiedOwner() && isValidId(sourceId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(sourceId) && isValidJob(incoming(), false, 'vertex-ai');
+      allow update: if isVerifiedOwner() && isValidId(sourceId) && isValidJob(incoming(), false, 'vertex-ai')
+        && incoming().ownerUid == existing().ownerUid;
+    }
+
+    match /mock_jobs/{sourceId} {
+      allow get: if isVerifiedOwner() && isValidId(sourceId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(sourceId) && isValidJob(incoming(), true, 'local-mock-synth');
+      allow update: if isVerifiedOwner() && isValidId(sourceId) && isValidJob(incoming(), true, 'local-mock-synth')
+        && incoming().ownerUid == existing().ownerUid;
+      allow delete: if isVerifiedOwner() && isValidId(sourceId) && existing().ownerUid == request.auth.uid;
+    }
+
+    match /qa_records/{sourceId} {
+      allow get: if isVerifiedOwner() && isValidId(sourceId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(sourceId) && isValidQa(incoming());
+      allow update: if isVerifiedOwner() && isValidId(sourceId) && isValidQa(incoming())
+        && incoming().ownerUid == existing().ownerUid;
+    }
+
+    match /events/{eventId} {
+      allow get: if isVerifiedOwner() && isValidId(eventId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(eventId) && isValidAudit(incoming());
+    }
+
+    match /errors/{errorId} {
+      allow get: if isVerifiedOwner() && isValidId(errorId);
+      allow list: if isVerifiedOwner() && existing().ownerUid == request.auth.uid;
+      allow create: if isVerifiedOwner() && isValidId(errorId) && isValidAudit(incoming());
+    }
+  }
+}

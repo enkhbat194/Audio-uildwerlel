@@ -4,6 +4,7 @@ import {
   SEED_FIRST_FIVE_ROWS,
   generateManifestCsv,
   generatePronunciationIssuesCsv,
+  generateSummaryJson,
   parseAndValidateImport,
 } from './sourceRegistry';
 import type { AudioJobReceipt, QaRecord } from './types';
@@ -78,8 +79,8 @@ test('generateManifestCsv emits required canonical columns and BLOCKED_FOR_RELEA
       peak_dbfs: -6.1,
       rms_dbfs: -12.4,
       format: 'wav',
-      storage_ref: 'local://.data/audio/PH006.wav',
-      storage_backend: 'local-preview',
+      storage_ref: 'local://mock/MOCK_PH006.wav',
+      storage_backend: 'local-preview-ephemeral',
       stale: false,
       created_at: '2026-11-17T00:00:00Z',
       updated_at: '2026-11-17T00:00:00Z',
@@ -109,4 +110,9 @@ test('generateManifestCsv emits required canonical columns and BLOCKED_FOR_RELEA
   const issuesCsv = generatePronunciationIssuesCsv(SEED_FIRST_FIVE_ROWS, qaMap);
   assert.ok(issuesCsv.includes('CZ-A0-M01-L01-PH006'));
   assert.ok(issuesCsv.includes('ů эгшиг богино сонсогдов'));
+
+  const summary = JSON.parse(generateSummaryJson(SEED_FIRST_FIVE_ROWS, {}, jobs, qaMap));
+  assert.equal(summary.real_success_count, 0);
+  assert.equal(summary.mock_count, 1);
+  assert.equal(summary.publication_policy, 'ALL_INTERNAL_PILOT_ONLY_BLOCKED_FOR_RELEASE');
 });

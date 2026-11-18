@@ -61,7 +61,7 @@ export interface AudioJobReceipt {
   rms_dbfs: number | null;
   format: 'wav' | null;
   storage_ref: string | null;
-  storage_backend: 'local-preview' | 'gcs-private-bucket' | null;
+  storage_backend: 'local-preview-ephemeral' | 'gcs-private-bucket' | null;
   stale: boolean;
   created_at: string;
   updated_at: string;
@@ -95,6 +95,18 @@ export interface ErrorLogEntry {
   message: string;
 }
 
+export interface DriveSelection {
+  folder_id: string | null;
+  folder_name: string | null;
+  last_synced_at: string | null;
+  uploaded_files: Array<{
+    name: string;
+    drive_file_id: string;
+    size: number;
+    kind: 'wav' | 'manifest';
+  }>;
+}
+
 export interface CloudRuntimeStatus {
   project_id: string;
   location: string;
@@ -102,18 +114,20 @@ export interface CloudRuntimeStatus {
   voice: string;
   endpoint: string;
   vertex_connected: boolean;
+  vertex_permission_verified: boolean;
   adc_available: boolean;
   runtime_identity: string | null;
-  storage_backend: 'local-preview' | 'gcs-private-bucket';
+  storage_backend: 'local-preview-ephemeral' | 'gcs-private-bucket';
   gcs_bucket: string | null;
   firestore_connected: boolean;
-  drive_connected: boolean;
-  drive_folder_name: string | null;
-  auth_mode: 'preview-local' | 'iap-or-allowlist';
-  owner_email: string | null;
+  firestore_database_id: string;
+  iap_enabled: boolean;
+  auth_mode: 'iap-and-firebase-jwt';
+  owner_allowlist: string[];
   estimated_cost_label: string;
   rate_limit_rpm: number;
   max_first_batch: number;
+  first_real_wav_verified: boolean;
   adc_error: string | null;
 }
 
@@ -121,10 +135,12 @@ export interface AppStateSnapshot {
   canonical_curriculum_sha256: string;
   dataset_version: string;
   sources: SourceRow[];
-  jobs: Record<string, AudioJobReceipt>;
+  real_jobs: Record<string, AudioJobReceipt>;
+  mock_jobs: Record<string, AudioJobReceipt>;
   qa: Record<string, QaRecord>;
   events: EventLogEntry[];
   errors: ErrorLogEntry[];
+  drive: DriveSelection;
   runtime: CloudRuntimeStatus;
 }
 

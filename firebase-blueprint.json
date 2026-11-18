@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "FactoryMeta": {
+      "title": "FactoryMeta",
+      "description": "Canonical curriculum metadata and Drive destination folder binding",
+      "type": "object",
+      "properties": {
+        "dataset_version": { "type": "string", "maxLength": 32 },
+        "canonical_curriculum_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "drive_folder_id": { "type": "string", "maxLength": 128 },
+        "drive_folder_name": { "type": "string", "maxLength": 256 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["dataset_version", "canonical_curriculum_sha256", "ownerUid", "updatedAt"]
+    },
+    "SourceRecord": {
+      "title": "SourceRecord",
+      "description": "Immutable Czech curriculum source row with SHA256 lock and publication gate",
+      "type": "object",
+      "properties": {
+        "pilot_order": { "type": "number" },
+        "source_id": { "type": "string", "maxLength": 64 },
+        "lesson_id": { "type": "string", "maxLength": 64 },
+        "cs_exact": { "type": "string", "maxLength": 500 },
+        "text_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "audio_text_key": { "type": "string", "maxLength": 64 },
+        "dataset_version": { "type": "string", "maxLength": 32 },
+        "locale": { "type": "string", "maxLength": 16 },
+        "source_type": { "type": "string", "maxLength": 32 },
+        "source_gate": { "type": "string", "maxLength": 64 },
+        "source_safe_to_submit": { "type": "boolean" },
+        "publish_allowed": { "type": "boolean" },
+        "source_match_count": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "ownerUid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["source_id", "lesson_id", "cs_exact", "text_sha256", "dataset_version", "source_gate", "publish_allowed", "ownerUid"]
+    },
+    "JobReceipt": {
+      "title": "JobReceipt",
+      "description": "Audio production receipt (real Vertex AI or isolated mock test)",
+      "type": "object",
+      "properties": {
+        "source_id": { "type": "string", "maxLength": 64 },
+        "dataset_version": { "type": "string", "maxLength": 32 },
+        "cs_exact_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "filename": { "type": "string", "maxLength": 256 },
+        "provider": { "type": "string", "enum": ["vertex-ai", "local-mock-synth"] },
+        "model": { "type": "string", "maxLength": 64 },
+        "voice": { "type": "string", "maxLength": 64 },
+        "speed_profile": { "type": "string", "enum": ["normal", "slow"] },
+        "status": { "type": "string", "maxLength": 32 },
+        "is_mock": { "type": "boolean" },
+        "storage_ref": { "type": "string", "maxLength": 512 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "maxLength": 64 },
+        "updated_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["source_id", "dataset_version", "cs_exact_sha256", "fingerprint", "filename", "provider", "model", "voice", "speed_profile", "status", "is_mock", "ownerUid", "created_at", "updated_at"]
+    },
+    "QaRecord": {
+      "title": "QaRecord",
+      "description": "Human listening QA evaluation record",
+      "type": "object",
+      "properties": {
+        "source_id": { "type": "string", "maxLength": 64 },
+        "listening_qa": { "type": "string", "enum": ["QA_PENDING", "PASS", "REVIEW", "FAIL"] },
+        "publication_gate": { "type": "string", "enum": ["BLOCKED_FOR_RELEASE", "INTERNAL_PILOT_ONLY"] },
+        "issue_category": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "reviewer": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "updated_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["source_id", "listening_qa", "publication_gate", "ownerUid", "updated_at"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Event or error audit log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "source_id": { "type": "string", "maxLength": 64 },
+        "ownerUid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "timestamp", "source_id", "ownerUid"]
+    }
+  },
+  "firestore": {
+    "/factory_meta/{metaId}": {
+      "schema": { "$ref": "#/entities/FactoryMeta" },
+      "description": "Global factory configuration and Drive folder selection"
+    },
+    "/sources/{sourceId}": {
+      "schema": { "$ref": "#/entities/SourceRecord" },
+      "description": "Verified Czech curriculum source entries"
+    },
+    "/real_jobs/{sourceId}": {
+      "schema": { "$ref": "#/entities/JobReceipt" },
+      "description": "Durable Vertex AI real production job receipts"
+    },
+    "/mock_jobs/{sourceId}": {
+      "schema": { "$ref": "#/entities/JobReceipt" },
+      "description": "Isolated synthetic mock test job receipts"
+    },
+    "/qa_records/{sourceId}": {
+      "schema": { "$ref": "#/entities/QaRecord" },
+      "description": "Human listening QA ratings and notes"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit events log"
+    },
+    "/errors/{errorId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Error telemetry log"
+    }
+  }
+}

@@ -1,8 +1,24 @@
-import { AlertTriangle, Eye, FileUp, Lock, Search, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Cloud,
+  Eye,
+  FileUp,
+  Lock,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { authedFetch } from '../lib/apiClient';
+import {
+  downloadDriveFileText,
+  listDriveImportFiles,
+  type DriveFileItem,
+} from '../lib/driveClient';
 import { parseAndValidateImport } from '../shared/sourceRegistry';
 import type {
   AudioJobReceipt,
+  ExecutionMode,
   ImportValidationResult,
   SourceRow,
 } from '../shared/types';
@@ -10,17 +26,25 @@ import { JobStatusLabel, ReleaseGateLabel } from './StatusBadge';
 
 interface SourceRegistryViewProps {
   sources: SourceRow[];
-  jobs: Record<string, AudioJobReceipt>;
+  realJobs: Record<string, AudioJobReceipt>;
+  mockJobs: Record<string, AudioJobReceipt>;
+  mode: ExecutionMode;
   datasetVersion: string;
   canonicalSha256: string;
-  onImportSuccess: () => Promise<void>;
+  driveAccessToken: string | null;
+  onConnectDrive: () => Promise<string | null>;
+  onImportSuccess: (importedRows: SourceRow[]) => Promise<void>;
 }
 
 export function SourceRegistryView({
   sources,
-  jobs,
+  realJobs,
+  mockJobs,
+  mode,
   datasetVersion,
   canonicalSha256,
+  driveAccessToken,
+  onConnectDrive,
   onImportSuccess,
 }: SourceRegistryViewProps) {
   const [query, setQuery] = useState('');
@@ -29,12 +53,22 @@ export function SourceRegistryView({
   const [importOpen, setImportOpen] = useState(false);
 
   // Import state
+  const [importTab, setImportTab] = useState<'local' | 'drive'>('local');
+  const [importOrigin, setImportOrigin] = useState<'upload' | 'google-drive'>('upload');
   const [importFormat, setImportFormat] = useState<'json' | 'csv'>('csv');
   const [rawImportText, setRawImportText] = useState('');
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [validation, setValidation] = useState<ImportValidationResult | null>(null);
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
   const [importServerError, setImportServerError] = useState<string | null>(null);
+
+  // Google Drive import state
+  const [driveFiles, setDriveFiles] = useState<DriveFileItem[]>([]);
+  const [isLoadingDriveFiles, setIsLoadingDriveFiles] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [loadingDriveFileId, setLoadingDriveFileId] = useState<string | null>(null);
+
+  const activeJobs = mode === 'mock' ? mockJobs : realJobs;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -50,9 +84,14 @@ export function SourceRegistryView({
     });
   }, [sources, query, gateFilter]);
 
-  function handleValidateLocal(text: string, fmt: 'json' | 'csv') {
+  function handleValidateLocal(
+    text: string,
+    fmt: 'json' | 'csv',
+    origin: 'upload' | 'google-drive' = 'upload'
+  ) {
     setRawImportText(text);
     setImportFormat(fmt);
+    setImportOrigin(origin);
     setImportServerError(null);
     if (!text.trim()) {
       setValidation(null);
@@ -66,7 +105,48 @@ export function SourceRegistryView({
     if (!file) return;
     const fmt = file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv';
     const text = await file.text();
-    handleValidateLocal(text, fmt);
+    handleValidateLocal(text, fmt, 'upload');
+  }
+
+  async function handleLoadDriveFiles(tokenOverride?: string | null) {
+    const token = tokenOverride ?? driveAccessToken;
+    if (!token) return;
+    setIsLoadingDriveFiles(true);
+    setDriveError(null);
+    try {
+      const files = await listDriveImportFiles(token);
+      setDriveFiles(files);
+    } catch (err) {
+      setDriveError(err instanceof Error ? err.message : 'Google Drive жагсаалт татахад алдаа гарлаа.');
+    } finally {
+      setIsLoadingDriveFiles(false);
+    }
+  }
+
+  async function handleReconnectDriveAndLoad() {
+    setDriveError(null);
+    const token = await onConnectDrive();
+    if (token) {
+      await handleLoadDriveFiles(token);
+    } else {
+      setDriveError('Google Drive OAuth эрх авч чадсангүй.');
+    }
+  }
+
+  async function handlePickDriveFile(file: DriveFileItem) {
+    if (!driveAccessToken) return;
+    setLoadingDriveFileId(file.id);
+    setDriveError(null);
+    try {
+      const text = await downloadDriveFileText(driveAccessToken, file.id);
+      const isJson =
+        file.name.toLowerCase().endsWith('.json') || file.mimeType === 'application/json';
+      handleValidateLocal(text, isJson ? 'json' : 'csv', 'google-drive');
+    } catch (err) {
+      setDriveError(err instanceof Error ? err.message : 'Drive файл татахад алдаа гарлаа.');
+    } finally {
+      setLoadingDriveFileId(null);
+    }
   }
 
   async function handleConfirmImport() {
@@ -74,16 +154,16 @@ export function SourceRegistryView({
     setIsSubmittingImport(true);
     setImportServerError(null);
     try {
-      const res = await fetch('/api/sources/import', {
+      const res = await authedFetch('/api/sources/import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Requested-With': 'AhojAudioFactory',
         },
         body: JSON.stringify({
           rawText: rawImportText,
           format: importFormat,
           replaceExisting,
+          sourceOrigin: importOrigin,
         }),
       });
       const data = await res.json();
@@ -91,7 +171,7 @@ export function SourceRegistryView({
         setImportServerError(data.error ?? 'Импорт хийхэд алдаа гарлаа.');
         return;
       }
-      await onImportSuccess();
+      await onImportSuccess(data.sources ?? []);
       setImportOpen(false);
       setRawImportText('');
       setValidation(null);
@@ -116,11 +196,16 @@ export function SourceRegistryView({
 
         <button
           type="button"
-          onClick={() => setImportOpen(true)}
+          onClick={() => {
+            setImportOpen(true);
+            if (driveAccessToken && driveFiles.length === 0) {
+              void handleLoadDriveFiles(driveAccessToken);
+            }
+          }}
           className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0"
         >
           <FileUp className="w-4 h-4" aria-hidden="true" />
-          <span>CSV / JSON импортлох</span>
+          <span>CSV / JSON / Drive импорт</span>
         </button>
       </div>
 
@@ -206,13 +291,16 @@ export function SourceRegistryView({
               <th className="py-3.5 px-4">content_id / Хичээл</th>
               <th className="py-3.5 px-4">Чех өгүүлбэр (Зөвхөн унших)</th>
               <th className="py-3.5 px-4">Эх туг ба зөвшөөрөл</th>
-              <th className="py-3.5 px-4">Normal / Slow</th>
+              <th className="py-3.5 px-4">
+                Normal ({mode === 'mock' ? 'MOCK' : 'Бодит'}) / Slow
+              </th>
               <th className="py-3.5 px-4 text-right">Үйлдэл</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
             {filtered.map((row) => {
-              const job = jobs[row.source_id];
+              const job = activeJobs[row.source_id];
+              const realExists = realJobs[row.source_id]?.status === 'REAL_SUCCESS';
               return (
                 <tr
                   key={row.source_id}
@@ -241,8 +329,13 @@ export function SourceRegistryView({
                     </div>
                   </td>
                   <td className="py-4 px-4 align-top space-y-1">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <JobStatusLabel status={job?.status ?? 'PENDING'} />
+                      {mode === 'mock' && realExists && (
+                        <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
+                          (+Бодит бэлэн)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400">
                       Slow: Хэрэгжүүлээгүй
@@ -276,7 +369,7 @@ export function SourceRegistryView({
       {/* Mobile / Tablet Cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map((row) => {
-          const job = jobs[row.source_id];
+          const job = activeJobs[row.source_id];
           return (
             <div
               key={row.source_id}
@@ -298,7 +391,7 @@ export function SourceRegistryView({
                 <button
                   type="button"
                   onClick={() => setPreviewRow(row)}
-                  className="min-h-[44px] px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg inline-flex items-center gap-1.5"
+                  className="min-h-[44px] px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Дэлгэрэнгүй</span>
@@ -398,7 +491,7 @@ export function SourceRegistryView({
         </div>
       )}
 
-      {/* CSV / JSON Importer Modal */}
+      {/* CSV / JSON / Google Drive Importer Modal */}
       {importOpen && (
         <div
           role="dialog"
@@ -426,11 +519,118 @@ export function SourceRegistryView({
               </button>
             </div>
 
+            {/* Source Origin Tabs: Local vs Google Drive */}
+            <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setImportTab('local')}
+                className={`px-3.5 py-2 min-h-[38px] text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ${
+                  importTab === 'local'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <FileUp className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Локал файл / Текст</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportTab('drive');
+                  if (driveAccessToken && driveFiles.length === 0) {
+                    void handleLoadDriveFiles(driveAccessToken);
+                  }
+                }}
+                className={`px-3.5 py-2 min-h-[38px] text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ${
+                  importTab === 'drive'
+                    ? 'bg-white dark:bg-slate-950 text-sky-800 dark:text-sky-300 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Cloud className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Google Drive-аас авах</span>
+              </button>
+            </div>
+
+            {importTab === 'drive' && (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+                {!driveAccessToken ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      Google Drive файлын жагсаалт уншихын тулд OAuth token-оо сэргээнэ үү.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleReconnectDriveAndLoad()}
+                      className="min-h-[44px] px-4 py-2 rounded-xl bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+                    >
+                      Google Drive эрх сэргээх
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Таны Google Drive дээрх JSON / CSV файлууд
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleLoadDriveFiles(driveAccessToken)}
+                        disabled={isLoadingDriveFiles}
+                        className="min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDriveFiles ? 'animate-spin' : ''}`} />
+                        <span>Шинэчлэх</span>
+                      </button>
+                    </div>
+
+                    {driveError && (
+                      <p className="text-xs text-red-700 dark:text-red-400">{driveError}</p>
+                    )}
+
+                    <div className="max-h-48 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
+                      {driveFiles.length === 0 ? (
+                        <p className="p-3 text-xs text-slate-500 dark:text-slate-400">
+                          {isLoadingDriveFiles
+                            ? 'Google Drive-аас уншиж байна...'
+                            : 'Тохирох .json эсвэл .csv файл олдсонгүй.'}
+                        </p>
+                      ) : (
+                        driveFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            className="px-3 py-2.5 flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-mono font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                {file.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {file.size ? `${Math.round(Number(file.size) / 1024)} KB` : '—'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={loadingDriveFileId === file.id}
+                              onClick={() => void handlePickDriveFile(file)}
+                              className="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold cursor-pointer whitespace-nowrap disabled:opacity-50"
+                            >
+                              {loadingDriveFileId === file.id ? 'Татаж байна...' : 'Татаж шалгах'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                 <button
                   type="button"
-                  onClick={() => handleValidateLocal(rawImportText, 'csv')}
+                  onClick={() => handleValidateLocal(rawImportText, 'csv', importOrigin)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-md cursor-pointer ${
                     importFormat === 'csv'
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-sm'
@@ -441,7 +641,7 @@ export function SourceRegistryView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleValidateLocal(rawImportText, 'json')}
+                  onClick={() => handleValidateLocal(rawImportText, 'json', importOrigin)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-md cursor-pointer ${
                     importFormat === 'json'
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-sm'
@@ -452,22 +652,32 @@ export function SourceRegistryView({
                 </button>
               </div>
 
-              <label className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-2">
-                <FileUp className="w-4 h-4" aria-hidden="true" />
-                <span>Файл сонгох (.csv / .json)</span>
-                <input type="file" accept=".csv,.json,text/csv,application/json" onChange={handleFileSelect} className="sr-only" />
-              </label>
+              {importTab === 'local' && (
+                <label className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-2">
+                  <FileUp className="w-4 h-4" aria-hidden="true" />
+                  <span>Файл сонгох (.csv / .json)</span>
+                  <input
+                    type="file"
+                    accept=".csv,.json,text/csv,application/json"
+                    onChange={handleFileSelect}
+                    className="sr-only"
+                  />
+                </label>
+              )}
             </div>
 
             <div>
-              <label htmlFor="import-textarea" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Эсвэл CSV / JSON агуулгыг шууд хуулж тавих
+              <label
+                htmlFor="import-textarea"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                Эсвэл CSV / JSON агуулгыг шалгах / шууд хуулж тавих
               </label>
               <textarea
                 id="import-textarea"
                 rows={6}
                 value={rawImportText}
-                onChange={(e) => handleValidateLocal(e.target.value, importFormat)}
+                onChange={(e) => handleValidateLocal(e.target.value, importFormat, importOrigin)}
                 placeholder="source_id,lesson_id,cs_exact,dataset_version,source_gate"
                 className="w-full p-3 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600"
               />
