@@ -85,9 +85,17 @@ export function isJobDriveEligible(
   job: AudioJobReceipt,
   qaMap: Record<string, QaRecord>
 ): boolean {
-  if (job.is_mock || job.status !== 'REAL_SUCCESS') return false;
+  // A PASS decision applies to one immutable WAV, not to any later regeneration
+  // of the same Czech sentence / speech style.
+  if (job.is_mock || job.status !== 'REAL_SUCCESS' || job.stale) return false;
+  if (job.storage_backend !== 'gcs-private-bucket' || !job.audio_sha256) return false;
   const qaRec = getQaForJob(qaMap, job);
-  return qaRec?.listening_qa === 'PASS';
+  if (qaRec?.listening_qa !== 'PASS') return false;
+  if (qaRec.audio_sha256 !== job.audio_sha256) return false;
+  if (qaRec.receipt_key && qaRec.receipt_key !== getJobReceiptKey(job)) return false;
+  if (job.speech_style && (qaRec.speech_style !== job.speech_style ||
+    qaRec.style_version !== job.style_version)) return false;
+  return true;
 }
 
 export const SEED_FIRST_FIVE_ROWS: SourceRow[] = [
