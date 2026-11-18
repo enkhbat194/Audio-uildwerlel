@@ -1,0 +1,12 @@
+{
+  "run": "A0_B01_T02_PROPER_NAME_BAT_REPAIR",
+  "purpose": "Correct false Czech ASR word Batu where exact source name is Bat; one bounded call only, same male Charon voice",
+  "source": "production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json",
+  "source_id": "CZ-A0-M01-L01-B01-T02",
+  "style": "natural",
+  "voice": "Charon",
+  "max_billable_tts_requests": 1,
+  "automatic_qa": true,
+  "publish_allowed": false,
+  "original_run_id": 44403604506
+}
