@@ -19,7 +19,12 @@ import {
   generateSummaryJson,
   parseAndValidateImport,
 } from '../shared/sourceRegistry';
-import type { AudioJobReceipt, ExecutionMode, SpeedProfile } from '../shared/types';
+import type {
+  AudioJobReceipt,
+  CloudRuntimeStatus,
+  ExecutionMode,
+  SpeedProfile,
+} from '../shared/types';
 import { authenticateOwnerRequest, type AuthVerifierDeps } from './auth';
 import {
   appendError,
@@ -37,15 +42,22 @@ import {
   downloadFromGcsPrivateBucket,
   probeCloudRuntimeStatus,
   uploadToGcsPrivateBucket,
+  type VertexTtsCallResult,
 } from './vertexTts';
 
 export const FIRST_PILOT_SOURCE_ID = 'CZ-A0-M01-L01-PH001';
 
 export interface ApiRouterOptions {
   authDeps?: AuthVerifierDeps;
+  runtimeProbe?: (forceRefresh?: boolean, firstRealWavVerified?: boolean) => Promise<CloudRuntimeStatus>;
+  ttsCaller?: (exactCzechText: string, voice?: string, maxRetries?: number) => Promise<VertexTtsCallResult>;
+  gcsUploader?: (bucketName: string, objectName: string, bytes: Uint8Array, contentType?: string) => Promise<string>;
 }
 
 export function createApiRouter(options: ApiRouterOptions = {}): express.Router {
+  const probeRuntime = options.runtimeProbe ?? probeCloudRuntimeStatus;
+  const invokeVertexTts = options.ttsCaller ?? callVertexTtsWithRetry;
+  const uploadToGcs = options.gcsUploader ?? uploadToGcsPrivateBucket;
   const router = express.Router();
   const rateBucket = new Map<string, number[]>();
 
@@ -114,7 +126,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
         !firstReal.is_mock &&
         Boolean(firstReal.audio_sha256)
     );
-    const runtime = await probeCloudRuntimeStatus(false, firstRealVerified);
+    const runtime = await probeRuntime(false, firstRealVerified);
 
     let dirty = false;
     for (const row of store.sources) {
@@ -193,7 +205,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     const firstRealVerified = Boolean(
       firstReal && firstReal.status === 'REAL_SUCCESS' && !firstReal.is_mock
     );
-    const runtime = await probeCloudRuntimeStatus(true, firstRealVerified);
+    const runtime = await probeRuntime(true, firstRealVerified);
     res.json({ runtime });
   });
 
@@ -302,7 +314,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     const firstRealVerified = Boolean(
       firstReal && firstReal.status === 'REAL_SUCCESS' && !firstReal.is_mock
     );
-    const runtime = await probeCloudRuntimeStatus(false, firstRealVerified);
+    const runtime = await probeRuntime(false, firstRealVerified);
 
     const ownerKey = (req as any).ownerAuth?.email ?? req.ip ?? 'owner';
     if (!checkRateLimit(ownerKey, runtime.rate_limit_rpm)) {
@@ -519,17 +531,30 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
       return;
     }
 
-    // Requirement #4: On Cloud Run, NEVER mark completed if only ephemeral local disk is available
-    if (process.env.K_SERVICE && !runtime.gcs_bucket) {
+    // Requirement #4: Prevent billable TTS whenever durable Cloud Storage (GCS_BUCKET_NAME + IAM) is NOT verified
+    if (
+      runtime.storage_backend !== 'gcs-private-bucket' ||
+      !runtime.gcs_bucket ||
+      !runtime.gcs_permission_verified
+    ) {
+      const storageMsg =
+        runtime.gcs_error ??
+        'Байнгын Cloud Storage (GCS_BUCKET_NAME болон storage.objects.create/get эрх) баталгаажаагүй тул төлбөртэй Vertex TTS дуудлагыг зогсоолоо.';
+      appendError(store, {
+        source_id: row.source_id,
+        http_status: 503,
+        code: 'EPHEMERAL_STORAGE_BLOCKED',
+        message: storageMsg,
+      });
+      saveStore(store);
       res.status(503).json({
         code: 'EPHEMERAL_STORAGE_BLOCKED',
-        error:
-          'Cloud Run дээр GCS_BUCKET_NAME тохируулаагүй тул түр локал дискэнд бодит WAV хадгалахыг хориглоно.',
+        error: storageMsg,
       });
       return;
     }
 
-    const ttsRes = await callVertexTtsWithRetry(row.cs_exact, String(voice), 3);
+    const ttsRes = await invokeVertexTts(row.cs_exact, String(voice), 3);
     if (!ttsRes.ok || !ttsRes.wavBytes) {
       const errStatus = ttsRes.ambiguous ? 'AMBIGUOUS_RETRY_REVIEW' : 'FAILED';
       const receipt: AudioJobReceipt = {
@@ -580,33 +605,30 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
     }
 
     const parsed = parseWavHeader(ttsRes.wavBytes);
-    const localStored = writeScopedAudioFile('real', scopedFilename, ttsRes.wavBytes);
-    let storageRef = `local://real/${scopedFilename}`;
-    let storageBackend: 'local-preview-ephemeral' | 'gcs-private-bucket' = 'local-preview-ephemeral';
-
-    if (runtime.gcs_bucket && runtime.adc_available) {
-      try {
-        storageRef = await uploadToGcsPrivateBucket(
-          runtime.gcs_bucket,
-          `real/${row.dataset_version}/${scopedFilename}`,
-          ttsRes.wavBytes,
-          'audio/wav'
-        );
-        storageBackend = 'gcs-private-bucket';
-      } catch (gcsErr) {
-        appendError(store, {
-          source_id: row.source_id,
-          http_status: 502,
-          code: 'GCS_UPLOAD_FAILED',
-          message: gcsErr instanceof Error ? gcsErr.message : 'GCS хадгалалт амжилтгүй.',
-        });
-        saveStore(store);
-        res.status(502).json({
-          error: 'Vertex AI хариу ирсэн боловч GCS хувийн bucket руу хадгалж чадсангүй.',
-        });
-        return;
-      }
+    let storageRef: string;
+    try {
+      storageRef = await uploadToGcs(
+        runtime.gcs_bucket,
+        `real/${row.dataset_version}/${scopedFilename}`,
+        ttsRes.wavBytes,
+        'audio/wav'
+      );
+    } catch (gcsErr) {
+      appendError(store, {
+        source_id: row.source_id,
+        http_status: 502,
+        code: 'GCS_UPLOAD_FAILED',
+        message: gcsErr instanceof Error ? gcsErr.message : 'GCS хадгалалт амжилтгүй.',
+      });
+      saveStore(store);
+      res.status(502).json({
+        code: 'GCS_UPLOAD_FAILED',
+        error: 'Vertex AI хариу ирсэн боловч GCS хувийн bucket руу хадгалж чадсангүй.',
+      });
+      return;
     }
+    const localStored = writeScopedAudioFile('real', scopedFilename, ttsRes.wavBytes);
+    const storageBackend = 'gcs-private-bucket' as const;
 
     const realReceipt: AudioJobReceipt = {
       source_id: row.source_id,
@@ -776,7 +798,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
     let buf: Buffer | null = null;
     if (scope === 'real' && matchingJob.storage_backend === 'gcs-private-bucket') {
-      const runtime = await probeCloudRuntimeStatus(false, true);
+      const runtime = await probeRuntime(false, true);
       if (runtime.gcs_bucket && runtime.adc_available) {
         buf = await downloadFromGcsPrivateBucket(
           runtime.gcs_bucket,
@@ -868,7 +890,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): express.Router 
 
     const realFolder = zip.folder('wav/real');
     let includedReal = 0;
-    const runtime = await probeCloudRuntimeStatus(false, false);
+    const runtime = await probeRuntime(false, false);
 
     for (const row of store.sources) {
       const realJob = store.real_jobs[row.source_id];

@@ -208,9 +208,54 @@ export function appendError(
   return entry;
 }
 
+function toFirestoreValue(val: unknown): Record<string, unknown> {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  }
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map((item) => toFirestoreValue(item)) } };
+  }
+  if (typeof val === 'object') {
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      if (v !== undefined) fields[k] = toFirestoreValue(v);
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
+function toFirestoreFields(obj: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) fields[k] = toFirestoreValue(v);
+  }
+  return fields;
+}
+
+async function patchFirestoreDoc(
+  baseUrl: string,
+  token: string,
+  docPath: string,
+  payload: Record<string, unknown>
+): Promise<boolean> {
+  const res = await fetch(`${baseUrl}/${docPath}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fields: toFirestoreFields(payload) }),
+  });
+  return res.ok;
+}
+
 /**
- * Syncs server state snapshot to Firestore REST API when Cloud Run ADC is available.
- * Never relies on ephemeral Cloud Run disk as the sole source of truth in production.
+ * Syncs server state snapshot (meta, sources, real_jobs, qa_records) to Firestore REST API
+ * when Cloud Run ADC is available so Cloud Run never relies on ephemeral disk as permanent state.
  */
 export async function syncSnapshotToFirestoreAdc(
   store: PersistedStore,
@@ -223,31 +268,40 @@ export async function syncSnapshotToFirestoreAdc(
       projectId
     )}/databases/${encodeURIComponent(FIRESTORE_DATABASE_ID)}/documents`;
 
-    const metaBody = {
-      fields: {
-        dataset_version: { stringValue: store.dataset_version },
-        canonical_curriculum_sha256: { stringValue: store.canonical_curriculum_sha256 },
-        drive_folder_id: store.drive.folder_id
-          ? { stringValue: store.drive.folder_id }
-          : { nullValue: null },
-        drive_folder_name: store.drive.folder_name
-          ? { stringValue: store.drive.folder_name }
-          : { nullValue: null },
-        ownerUid: { stringValue: ownerUid },
-        updatedAt: { stringValue: new Date().toISOString() },
-      },
-    };
-
-    const res = await fetch(`${baseUrl}/factory_meta/config`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(metaBody),
+    const now = new Date().toISOString();
+    const metaOk = await patchFirestoreDoc(baseUrl, token, 'factory_meta/config', {
+      dataset_version: store.dataset_version,
+      canonical_curriculum_sha256: store.canonical_curriculum_sha256,
+      drive_folder_id: store.drive.folder_id,
+      drive_folder_name: store.drive.folder_name,
+      ownerUid,
+      updatedAt: now,
     });
 
-    return res.ok;
+    await Promise.all([
+      ...store.sources.map((row) =>
+        patchFirestoreDoc(baseUrl, token, `sources/${encodeURIComponent(row.source_id)}`, {
+          ...row,
+          publish_allowed: row.source_gate === 'BLOCK_DOMAIN' ? false : row.publish_allowed,
+          ownerUid,
+          updatedAt: now,
+        })
+      ),
+      ...Object.values(store.real_jobs).map((job) =>
+        patchFirestoreDoc(baseUrl, token, `real_jobs/${encodeURIComponent(job.source_id)}`, {
+          ...job,
+          ownerUid,
+        })
+      ),
+      ...Object.values(store.qa).map((qa) =>
+        patchFirestoreDoc(baseUrl, token, `qa_records/${encodeURIComponent(qa.source_id)}`, {
+          ...qa,
+          ownerUid,
+        })
+      ),
+    ]);
+
+    return metaOk;
   } catch {
     return false;
   }

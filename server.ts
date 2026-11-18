@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import { createApiRouter } from './src/server/appFactory';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   const app = express();

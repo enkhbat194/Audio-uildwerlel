@@ -28,15 +28,17 @@ let cachedFirebaseCerts: { certs: Record<string, string>; expiresAt: number } | 
 const oauthClient = new OAuth2Client();
 
 export function getOwnerAllowlist(override?: string[]): string[] {
-  if (override && override.length > 0) {
-    return override.map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (override !== undefined) {
+    return override
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => Boolean(e) && e !== '*');
   }
   const raw = process.env.OWNER_EMAIL_ALLOWLIST?.trim();
   if (!raw) return DEFAULT_OWNER_ALLOWLIST;
   const parsed = raw
     .split(',')
     .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+    .filter((e) => Boolean(e) && e !== '*' && e.includes('@'));
   return parsed.length > 0 ? parsed : DEFAULT_OWNER_ALLOWLIST;
 }
 

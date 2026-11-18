@@ -63,6 +63,52 @@ async function verifyVertexIamPermissions(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * Verifies real IAM permissions on the configured GCS bucket before reporting durable storage ready.
+ */
+async function verifyGcsBucketAccess(
+  token: string,
+  bucketName: string
+): Promise<{ verified: boolean; error: string | null }> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    const url =
+      `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucketName)}/iam/testPermissions` +
+      `?permissions=storage.objects.create&permissions=storage.objects.get`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return {
+        verified: false,
+        error: `GCS bucket (${bucketName}) шалгалт амжилтгүй (HTTP ${res.status}).`,
+      };
+    }
+    const data = (await res.json()) as { permissions?: string[] };
+    const perms = Array.isArray(data.permissions) ? data.permissions : [];
+    const hasCreate = perms.includes('storage.objects.create');
+    const hasGet = perms.includes('storage.objects.get');
+    if (!hasCreate || !hasGet) {
+      return {
+        verified: false,
+        error: `GCS bucket (${bucketName}) дээр storage.objects.create/get эрх дутуу байна.`,
+      };
+    }
+    return { verified: true, error: null };
+  } catch (err) {
+    return {
+      verified: false,
+      error:
+        err instanceof Error
+          ? `GCS шалгалтын алдаа: ${err.message}`
+          : 'GCS bucket шалгалт амжилтгүй.',
+    };
+  }
+}
+
 export async function probeCloudRuntimeStatus(
   forceRefresh = false,
   firstRealWavVerified = false
@@ -75,19 +121,22 @@ export async function probeCloudRuntimeStatus(
     };
   }
 
-  const gcsBucket =
-    process.env.GCS_BUCKET_NAME?.trim() ||
-    (firebaseConfig as any).storageBucket?.trim() ||
-    null;
+  // Require explicit GCS_BUCKET_NAME; do NOT treat Firebase placeholder bucket as verified durable storage
+  const gcsBucket = process.env.GCS_BUCKET_NAME?.trim() || null;
   const firestoreDbId =
     process.env.FIRESTORE_DATABASE_ID?.trim() ||
     (firebaseConfig as any).firestoreDatabaseId ||
     '(default)';
   const iapEnabled = Boolean(process.env.IAP_AUDIENCE?.trim() || process.env.REQUIRE_IAP === 'true');
+  const allowlistExplicit = Boolean(process.env.OWNER_EMAIL_ALLOWLIST?.trim());
   const ownerAllowlist = getOwnerAllowlist();
 
   let adcAvailable = false;
   let permissionVerified = false;
+  let gcsPermissionVerified = false;
+  let gcsError: string | null = gcsBucket
+    ? null
+    : 'GCS_BUCKET_NAME орчны хувьсагч тохируулаагүй байна.';
   let runtimeIdentity: string | null = null;
   let adcError: string | null = null;
 
@@ -104,6 +153,7 @@ export async function probeCloudRuntimeStatus(
     if (isAiStudioSandbox || (!projectMatches && !process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
       adcAvailable = false;
       permissionVerified = false;
+      gcsPermissionVerified = false;
       runtimeIdentity = null;
       adcError =
         'AI Studio preview орчинд байна. project-a699c3ff-995a-4b88-add төслийн Cloud Run Workload Identity (ADC) байхгүй.';
@@ -135,11 +185,17 @@ export async function probeCloudRuntimeStatus(
           adcError =
             'ADC токен олдсон боловч project-a699c3ff-995a-4b88-add дээр aiplatform.endpoints.predict эрх баталгаажсангүй.';
         }
+        if (gcsBucket) {
+          const gcsCheck = await verifyGcsBucketAccess(acquiredToken, gcsBucket);
+          gcsPermissionVerified = gcsCheck.verified;
+          gcsError = gcsCheck.error;
+        }
       }
     }
   } catch (err) {
     adcAvailable = false;
     permissionVerified = false;
+    gcsPermissionVerified = false;
     adcError =
       err instanceof Error && err.message === 'ADC_METADATA_TIMEOUT'
         ? 'Cloud Run Workload Identity / ADC олдсонгүй (AI Studio preview орчин).'
@@ -147,6 +203,8 @@ export async function probeCloudRuntimeStatus(
           ? err.message
           : 'ADC шалгалт амжилтгүй боллоо.';
   }
+
+  const durableGcsReady = Boolean(gcsBucket && adcAvailable && gcsPermissionVerified);
 
   const status: CloudRuntimeStatus = {
     project_id: VERTEX_PROJECT_ID,
@@ -158,13 +216,16 @@ export async function probeCloudRuntimeStatus(
     vertex_permission_verified: permissionVerified,
     adc_available: adcAvailable,
     runtime_identity: runtimeIdentity,
-    storage_backend: gcsBucket && adcAvailable ? 'gcs-private-bucket' : 'local-preview-ephemeral',
+    storage_backend: durableGcsReady ? 'gcs-private-bucket' : 'local-preview-ephemeral',
     gcs_bucket: gcsBucket,
+    gcs_permission_verified: gcsPermissionVerified,
+    gcs_error: gcsError,
     firestore_connected: Boolean(firestoreDbId),
     firestore_database_id: firestoreDbId,
     iap_enabled: iapEnabled,
     auth_mode: 'iap-and-firebase-jwt',
     owner_allowlist: ownerAllowlist,
+    allowlist_explicit: allowlistExplicit,
     estimated_cost_label: 'Тооцоолоогүй',
     rate_limit_rpm: Number(process.env.TTS_RATE_LIMIT_RPM ?? 10),
     max_first_batch: 5,

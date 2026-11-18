@@ -363,3 +363,163 @@ test('driveClient listDriveImportFiles & uploadBytesToDriveFolder construct vali
     globalThis.fetch = originalFetch;
   }
 });
+
+test('all server API routes deny unauthenticated requests even when OWNER_EMAIL_ALLOWLIST is missing or wildcard', async () => {
+  const prevAllowlist = process.env.OWNER_EMAIL_ALLOWLIST;
+  delete process.env.OWNER_EMAIL_ALLOWLIST;
+
+  try {
+    const { getOwnerAllowlist } = await import('./auth');
+    assert.deepEqual(getOwnerAllowlist(), ['zazadada8899@gmail.com']);
+
+    process.env.OWNER_EMAIL_ALLOWLIST = '*';
+    assert.deepEqual(getOwnerAllowlist(), ['zazadada8899@gmail.com']);
+    delete process.env.OWNER_EMAIL_ALLOWLIST;
+
+    const endpoints: Array<{ method: string; path: string; body?: string }> = [
+      { method: 'GET', path: '/api/state' },
+      { method: 'POST', path: '/api/runtime/refresh' },
+      { method: 'POST', path: '/api/sources/import', body: JSON.stringify({ rawText: '', format: 'csv' }) },
+      { method: 'POST', path: '/api/tts/generate', body: JSON.stringify({ sourceId: 'CZ-A0-M01-L01-PH001', mode: 'vertex' }) },
+      { method: 'POST', path: '/api/jobs/reset-mock' },
+      { method: 'POST', path: '/api/qa/CZ-A0-M01-L01-PH001', body: JSON.stringify({ listening_qa: 'PASS' }) },
+      { method: 'POST', path: '/api/drive/folder', body: JSON.stringify({ folderId: '1', folderName: 'x' }) },
+      { method: 'POST', path: '/api/drive/sync-record', body: JSON.stringify({ uploadedFiles: [] }) },
+      { method: 'GET', path: '/api/audio/real/test.wav' },
+      { method: 'GET', path: '/api/export/manifest/results' },
+      { method: 'GET', path: '/api/export/zip' },
+    ];
+
+    for (const ep of endpoints) {
+      const res = await fetch(`${baseUrl}${ep.path}`, {
+        method: ep.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'AhojAudioFactory',
+        },
+        body: ep.body,
+      });
+      assert.equal(
+        res.status,
+        401,
+        `Expected 401 on unauthenticated ${ep.method} ${ep.path} when OWNER_EMAIL_ALLOWLIST is missing`
+      );
+    }
+  } finally {
+    if (prevAllowlist !== undefined) {
+      process.env.OWNER_EMAIL_ALLOWLIST = prevAllowlist;
+    } else {
+      delete process.env.OWNER_EMAIL_ALLOWLIST;
+    }
+  }
+});
+
+test('prevents billable Vertex TTS generation BEFORE calling Vertex AI when durable Cloud Storage is unverified', async () => {
+  const { createApiRouter } = await import('./appFactory');
+  const { generateMockSpeechWav } = await import('../shared/audioAndCrypto');
+
+  let ttsCallCount = 0;
+  let gcsVerified = false;
+
+  const customApp = express();
+  customApp.use(express.json());
+  customApp.use(
+    '/api',
+    createApiRouter({
+      authDeps: {
+        projectId: TEST_PROJECT,
+        iapAudience: TEST_IAP_AUDIENCE,
+        requireIap: false,
+        ownerAllowlist: ['zazadada8899@gmail.com'],
+        fetchFirebaseCerts: async () => ({ [TEST_KID]: publicKeyPem }),
+      },
+      runtimeProbe: async (_force, firstRealVerified) => ({
+        project_id: TEST_PROJECT,
+        location: 'global',
+        model: 'gemini-3.8-flash-tts',
+        voice: 'Achernar',
+        endpoint: 'https://aiplatform.googleapis.com/test',
+        vertex_connected: true,
+        vertex_permission_verified: true,
+        adc_available: true,
+        runtime_identity: 'audio-factory-sa@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com',
+        storage_backend: gcsVerified ? 'gcs-private-bucket' : 'local-preview-ephemeral',
+        gcs_bucket: gcsVerified ? 'ahoj-private-audio' : null,
+        gcs_permission_verified: gcsVerified,
+        gcs_error: gcsVerified ? null : 'GCS_BUCKET_NAME тохируулаагүй байна.',
+        firestore_connected: true,
+        firestore_database_id: 'ai-studio-608c02cc-851c-478c-a335-cdcc0cf9a9c3',
+        iap_enabled: true,
+        auth_mode: 'iap-and-firebase-jwt',
+        owner_allowlist: ['zazadada8899@gmail.com'],
+        allowlist_explicit: true,
+        estimated_cost_label: 'Тооцоолоогүй',
+        rate_limit_rpm: 10,
+        max_first_batch: 5,
+        first_real_wav_verified: Boolean(firstRealVerified),
+        adc_error: null,
+      }),
+      ttsCaller: async (text) => {
+        ttsCallCount++;
+        return {
+          ok: true,
+          httpStatus: 200,
+          providerRequestId: 'req-real-1',
+          attempts: 1,
+          wavBytes: generateMockSpeechWav(text, 'CZ-A0-M01-L01-PH001'),
+        };
+      },
+      gcsUploader: async (bucket, obj) => `gs://${bucket}/${obj}`,
+    })
+  );
+
+  const customServer = http.createServer(customApp);
+  await new Promise<void>((resolve) => customServer.listen(0, '127.0.0.1', () => resolve()));
+  const addr = customServer.address() as { port: number };
+  const customUrl = `http://127.0.0.1:${addr.port}`;
+
+  try {
+    const ownerToken = mintOwnerFirebaseToken();
+    const headers = {
+      Authorization: `Bearer ${ownerToken}`,
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'AhojAudioFactory',
+    };
+
+    // 1. Vertex connected, but durable GCS NOT configured -> MUST block BEFORE calling Vertex TTS!
+    const blockedRes = await fetch(`${customUrl}/api/tts/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        sourceId: 'CZ-A0-M01-L01-PH001',
+        mode: 'vertex',
+      }),
+    });
+    assert.equal(blockedRes.status, 503);
+    const blockedJson = (await blockedRes.json()) as { code: string };
+    assert.equal(blockedJson.code, 'EPHEMERAL_STORAGE_BLOCKED');
+    assert.equal(ttsCallCount, 0, 'Must NOT invoke billable Vertex TTS when durable storage is unconfigured');
+
+    // 2. Now enable verified durable GCS -> PH001 real WAV succeeds and records gs:// storage_ref
+    gcsVerified = true;
+    const okRes = await fetch(`${customUrl}/api/tts/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        sourceId: 'CZ-A0-M01-L01-PH001',
+        mode: 'vertex',
+      }),
+    });
+    assert.equal(okRes.status, 200);
+    const okJson = (await okRes.json()) as {
+      job: { status: string; storage_backend: string; storage_ref: string; is_mock: boolean };
+    };
+    assert.equal(ttsCallCount, 1);
+    assert.equal(okJson.job.status, 'REAL_SUCCESS');
+    assert.equal(okJson.job.is_mock, false);
+    assert.equal(okJson.job.storage_backend, 'gcs-private-bucket');
+    assert.ok(okJson.job.storage_ref.startsWith('gs://ahoj-private-audio/real/'));
+  } finally {
+    await new Promise<void>((resolve) => customServer.close(() => resolve()));
+  }
+});

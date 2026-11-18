@@ -119,11 +119,14 @@ export interface CloudRuntimeStatus {
   runtime_identity: string | null;
   storage_backend: 'local-preview-ephemeral' | 'gcs-private-bucket';
   gcs_bucket: string | null;
+  gcs_permission_verified: boolean;
+  gcs_error: string | null;
   firestore_connected: boolean;
   firestore_database_id: string;
   iap_enabled: boolean;
   auth_mode: 'iap-and-firebase-jwt';
   owner_allowlist: string[];
+  allowlist_explicit: boolean;
   estimated_cost_label: string;
   rate_limit_rpm: number;
   max_first_batch: number;

@@ -371,15 +371,20 @@ export function FilesSettingsView({
             Google Cloud Storage &amp; Firestore
           </h2>
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            {runtime.storage_backend === 'gcs-private-bucket' && runtime.gcs_bucket
-              ? `GCS Bucket: gs://${runtime.gcs_bucket}`
+            {runtime.storage_backend === 'gcs-private-bucket' && runtime.gcs_bucket && runtime.gcs_permission_verified
+              ? `GCS Bucket: gs://${runtime.gcs_bucket} (IAM OK)`
+              : runtime.gcs_bucket
+              ? `GCS Bucket: gs://${runtime.gcs_bucket} (Эрх баталгаажаагүй)`
               : 'GCS Bucket: Тохируулаагүй (Preview орчин)'}
           </p>
+          {runtime.gcs_error && (
+            <p className="text-xs text-amber-800 dark:text-amber-300">{runtime.gcs_error}</p>
+          )}
           <p className="text-xs font-mono text-slate-600 dark:text-slate-400">
             Firestore DB: {runtime.firestore_database_id}
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Cloud Run дээр <span className="font-mono">GCS_BUCKET_NAME</span> заавал тохируулна; bucket байхгүй үед бодит WAV-ийг Cloud Run түр дискэнд бичихийг сервер автоматаар хориглоно (<span className="font-mono">EPHEMERAL_STORAGE_BLOCKED</span>).
+            Cloud Run дээр <span className="font-mono">GCS_BUCKET_NAME</span> болон <span className="font-mono">storage.objects.create/get</span> эрх баталгаажаагүй бол төлбөртэй Vertex TTS дуудлага эхлүүлэхийг сервер автоматаар хориглоно (<span className="font-mono">EPHEMERAL_STORAGE_BLOCKED</span>).
           </p>
         </div>
 
