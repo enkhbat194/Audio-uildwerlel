@@ -12,6 +12,7 @@ on:
       - docs/GITHUB_WIF_HANDOFF.md
       - qa/requests/VOICE_QA_RUN_20261119.json
       - qa/requests/VOICE_QA_NATURAL_REPAIR_20261119.json
+      - qa/requests/VOICE_QA_FLUENT_V2_20261119.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -180,5 +181,67 @@ jobs:
         with:
           name: ahoj-natural-auto-repair-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-natural-repair/
+          retention-days: 14
+          if-no-files-found: warn
+
+  voice-quality-fluent-v2:
+    name: Fluent Czech Natural and Slow — two attempts + automatic pause QA
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'qa(run): fluent-v2 two WAVs once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out locked experimental branch
+        uses: actions/checkout@v4
+      - name: Authenticate by existing limited GitHub OIDC
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 600s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Generate two bounded, potentially billed Czech WAVs
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-fluent-v2
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/voice_quality_full_sentence.py scripts/auto_audio_qa.py
+          python3 scripts/voice_quality_full_sentence.py --generate --artifact-only --fluent-v2
+      - name: Offline ASR dependencies
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Auto QA exact Czech + waveform pauses, fail-closed
+        env:
+          AHOJ_VOICE_QA_OUTPUT_DIR: ${{ runner.temp }}/ahoj-fluent-v2
+        run: |
+          python3 scripts/auto_audio_qa.py \
+            --input-dir "$AHOJ_VOICE_QA_OUTPUT_DIR" \
+            --output "$AHOJ_VOICE_QA_OUTPUT_DIR/auto_qa_report.json" --model small
+          python3 - <<'PY'
+          import json, os
+          p = os.path.join(os.environ["AHOJ_VOICE_QA_OUTPUT_DIR"],"auto_qa_report.json")
+          data = json.load(open(p))
+          for name, report in data["variants"].items():
+              print(name, report["decision"], "longest_pause_s",
+                    report["technical"].get("max_internal_pause_seconds"),
+                    "ASR", report["asr_transcript"])
+          PY
+      - name: Keep both WAVs and QA verdicts private, regardless of QA outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-fluent-v2-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-fluent-v2/
           retention-days: 14
           if-no-files-found: warn
