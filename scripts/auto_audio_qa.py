@@ -154,7 +154,10 @@ def main() -> int:
         print("ASR_UNAVAILABLE:", str(exc), file=sys.stderr)
         model = None
     reports = {}
-    for style in ("natural", "learning_slow"):
+    styles_in_receipt = [s for s in ("natural", "learning_slow") if s in receipt.get("variants", {})]
+    if not styles_in_receipt:
+        raise SystemExit("NO_AUDIO_VARIANTS_IN_RECEIPT")
+    for style in styles_in_receipt:
         path = input_dir / f"QA_ONLY_FULL_SENTENCE_{style}.wav"
         technical = inspect_wav(path)
         record = receipt.get("variants", {}).get(style) or {}
@@ -203,7 +206,8 @@ def main() -> int:
             "asr_transcript": heard,
             "accuracy": accuracy,
         }
-    if (reports["natural"]["technical"]["technical_pass"] and
+    if ("natural" in reports and "learning_slow" in reports and
+        reports["natural"]["technical"]["technical_pass"] and
         reports["learning_slow"]["technical"]["technical_pass"] and
         reports["learning_slow"]["technical"]["duration_seconds"] <
         reports["natural"]["technical"]["duration_seconds"] * 1.03):
