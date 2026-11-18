@@ -17,3 +17,5 @@ services:
         value: production
       - key: FREE_HOSTING_POC
         value: 'true'
+      - key: VITE_FREE_HOSTING_POC
+        value: 'true'
