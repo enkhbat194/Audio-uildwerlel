@@ -1,0 +1,13 @@
+{
+  "run_id": "A0_DIALOGUE_B01_6_TURNS_20261119",
+  "source": "production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json",
+  "source_status": "draft_ai_not_native_reviewed",
+  "reason": "Owner requested contextual emotional expression and adult-teacher-natural delivery in dialogue audio",
+  "max_billable_tts_requests": 6,
+  "auto_qa": true,
+  "google_drive_direct_sync": false,
+  "release_allowed": false,
+  "speaker_A": "Jana, female, Achernar",
+  "speaker_B": "Bat, male, Charon",
+  "one_WAV_per_turn": true
+}
