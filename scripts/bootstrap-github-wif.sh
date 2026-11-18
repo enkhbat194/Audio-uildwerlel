@@ -71,7 +71,7 @@ if ! gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
     --issuer-uri="https://token.actions.githubusercontent.com/" \
     --attribute-mapping="${CLAIM_MAP}" \
     --attribute-condition="${CONDITION}" \
-    --display-name="Ahoj GitHub preflight branch only"
+    --display-name="Ahoj GH Preflight"
 else
   # Fail closed rather than silently reusing a provider that might be broader.
   current_condition="$(gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
