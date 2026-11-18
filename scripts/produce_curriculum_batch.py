@@ -26,15 +26,15 @@ MAX_REQUESTS = 16
 
 def source_validate(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("dataset_version") != "v0.9.20":
-        raise ValueError("Incorrect canonical source version")
+    if data.get("dataset_version") not in ("v0.9.20", "0.9.1-editorial-candidate"):
+        raise ValueError("Unsupported lesson text source version")
     if data.get("scope") != "PRIVATE_INTERNAL_STAGING_ONLY" or data.get("publish_allowed") is not False:
         raise ValueError("Production release not authorized")
     if data.get("model") != MODEL or data.get("voice") != VOICE:
         raise ValueError("Model/voice mismatch; refused instead of guessing")
     variants = data.get("variants")
-    if variants != list(ALLOWED_STYLES):
-        raise ValueError("Expected Natural and Learning Slow, in that order")
+    if variants not in (list(ALLOWED_STYLES), ["natural"]):
+        raise ValueError("Allowed variants: Natural only or Natural + Learning Slow")
     rows = data.get("rows")
     max_calls = data.get("max_billable_requests")
     if not isinstance(rows, list) or not 1 <= len(rows) <= MAX_ROWS or len(rows)*len(variants) > MAX_REQUESTS:
@@ -45,7 +45,7 @@ def source_validate(path):
     for row in rows:
         uid = row.get("source_id")
         sentence = row.get("cs_exact")
-        if not isinstance(uid, str) or not re.fullmatch(r"CZ-A0-M\d\d-L\d\d-PH\d\d\d", uid):
+        if not isinstance(uid, str) or not re.fullmatch(r"CZ-A0-M\d\d-L\d\d-(PH\d\d\d|B\d\d-T\d\d)", uid):
             raise ValueError("Invalid canonical source ID")
         if uid in seen:
             raise ValueError("Duplicate source ID")
@@ -56,14 +56,27 @@ def source_validate(path):
             raise ValueError("Source text SHA256 mismatch " + uid)
         if row.get("source_gate") == "BLOCK_DOMAIN":
             raise ValueError("BLOCK_DOMAIN cannot enter production batch")
-        if row.get("source_gate") != "language_prosody_review":
+        if row.get("source_gate") not in ("language_prosody_review", "draft_ai_not_native_reviewed"):
             raise ValueError("Unexpected source gate")
+        if row.get("source_gate") == "draft_ai_not_native_reviewed" and (
+            row.get("kind") != "dialogue_turn" or data.get("dataset_version") != "0.9.1-editorial-candidate"
+        ):
+            raise ValueError("Editorial candidate can only be synthesized as a private dialogue test")
         if row.get("kind") not in ("phrase", "dialogue_turn"):
             raise ValueError("Unknown utterance kind")
         if row.get("intent") not in ALLOWED_INTENTS or row.get("emotion") not in ALLOWED_EMOTIONS:
             raise ValueError("Unverified intent or emotion classification")
-        if row.get("kind") == "dialogue_turn" and not row.get("speaker_role"):
-            raise ValueError("Dialogue requires a speaker role")
+        if row.get("kind") == "dialogue_turn":
+            if not row.get("speaker_role") or not row.get("dialogue_id") or not row.get("setting"):
+                raise ValueError("Dialogue requires exact source, speaker and setting")
+            if data["variants"] != ["natural"]:
+                raise ValueError("Dialogue pilot must use one natural turn audio per speaker")
+            if row.get("persona_gender") == "feminine" and row.get("voice") != "Achernar":
+                raise ValueError("Female dialogue casting must use female voice")
+            if row.get("persona_gender") == "masculine" and row.get("voice") != "Charon":
+                raise ValueError("Male dialogue casting must use male voice")
+        elif row.get("voice", VOICE) != VOICE:
+            raise ValueError("Teacher phrase voice must remain the verified Achernar")
     return data
 
 
@@ -78,11 +91,13 @@ def voice_direction(row, style):
     if row["kind"] == "dialogue_turn":
         role = re.sub(r"[^a-zA-Z0-9 _-]", "", row["speaker_role"])[:45]
         emotion = row["emotion"].replace("_", " ")
+        setting = row.get("setting", "")[:130]
         return (
-            base + f"You are speaking a real-life dialogue turn as {role}. "
-            f"Convey only a subtle, context-appropriate {emotion} tone, not a dramatic performance. "
-            + ("Use natural conversational flow." if style == "natural"
-               else "Use a slightly slower but fluent teaching-friendly rhythm.")
+            base + f"This is a courteous workplace introduction dialogue; you play {role}. "
+            f"The situation is: {setting}. Deliver subtle {emotion} fitting the intention; "
+            "no theatrical acting or exaggerated pauses. "
+            + ("Maintain natural conversational rhythm." if style == "natural"
+               else "Keep a slightly slower but fluent rhythm.")
         )
     if style == "natural":
         return (base + "A kind adult Czech language teacher demonstrates this utterance naturally: "
@@ -180,7 +195,8 @@ def main():
             record = {"source_id": uid, "lesson_id": source["lesson_id"],
                       "source_sha256": source["text_sha256"], "text": source["cs_exact"],
                       "style": style, "intent": source["intent"], "emotion": source["emotion"],
-                      "speaker_role": source["speaker_role"],
+                      "speaker_role": source["speaker_role"], "dialogue_id": source.get("dialogue_id"),
+                      "persona_gender": source.get("persona_gender"),
                       "source_gate": source["source_gate"], "publication_gate": "BLOCKED_FOR_RELEASE"}
             try:
                 direction = voice_direction(source, style)
@@ -190,9 +206,11 @@ def main():
                                   "do not omit its first consonant or add any explanatory words.")
                 print("GENERATE", uid, style, flush=True)
                 report["attempted_calls"] += 1
-                audio, info = fetch_audio(style, direction, token, text=source["cs_exact"])
+                cast_voice = source.get("voice", VOICE)
+                audio, info = fetch_audio(style, direction, token, text=source["cs_exact"], voice=cast_voice)
                 original_audio_sha = info["audio_sha256"]
-                filename = f"{uid}__{style}__teacher-v1__{original_audio_sha[:12]}.wav"
+                mode_label = "dialogue-v1" if source["kind"] == "dialogue_turn" else "teacher-v1"
+                filename = f"{uid}__{style}__{mode_label}__{cast_voice}__{original_audio_sha[:12]}.wav"
                 tmp = output / filename
                 tmp.write_bytes(audio)
                 technical_preview = inspect_wav(tmp)
@@ -212,7 +230,7 @@ def main():
                                "audio_sha256": hashlib.sha256(audio).hexdigest(),
                                "original_audio_sha256": original_audio_sha,
                                "duration_ms": round(1000 * quality["technical"].get("duration_seconds", 0)),
-                               "wav_bytes": len(audio), "model": MODEL, "voice": VOICE,
+                               "wav_bytes": len(audio), "model": MODEL, "voice": cast_voice,
                                "voice_prompt": direction, "qa": quality})
                 print("QA", uid, style, quality["decision"], "pause_seconds",
                       quality["technical"].get("max_internal_pause_seconds"), flush=True)
