@@ -1,0 +1,15 @@
+{
+  "request_id": "VOICE_QA_RUN_20261119",
+  "purpose": "one-off two-variant Czech sentence voice QA; not curriculum material",
+  "mode": "artifact_only",
+  "sentence": "Můžete mi prosím říct, kde je nejbližší autobusová zastávka a jak se tam dostanu?",
+  "styles": [
+    "natural",
+    "learning_slow"
+  ],
+  "source_lock_change": false,
+  "google_drive_sync": false,
+  "storage_write": false,
+  "request_scope": "two TTS calls only, no retries",
+  "approval": "Owner approved proceeding after granting Vertex AI role in conversation, 2026-11-19."
+}
