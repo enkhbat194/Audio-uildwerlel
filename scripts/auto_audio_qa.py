@@ -109,12 +109,12 @@ def inspect_wav(path: Path) -> dict:
             if silent and gap_start is None:
                 gap_start = i
             elif not silent and gap_start is not None:
-                duration = (i - gap_start) * 0.02
-                if duration >= 0.16:
+                gap_duration = (i - gap_start) * 0.02
+                if gap_duration >= 0.16:
                     internal_pauses.append({
                         "from_seconds": round(gap_start * 0.02, 3),
                         "to_seconds": round(i * 0.02, 3),
-                        "duration_seconds": round(duration, 3),
+                        "duration_seconds": round(gap_duration, 3),
                     })
                 gap_start = None
     max_internal_pause = max((p["duration_seconds"] for p in internal_pauses), default=0)
