@@ -174,6 +174,8 @@ def main():
                         help="One-time bounded retry: synthesize only one style.")
     parser.add_argument("--natural-repair", action="store_true",
                         help="Keep exact text but request clearer Czech morphological endings.")
+    parser.add_argument("--fluent-v2", action="store_true",
+                        help="Use fluent, non-hesitant delivery for both exact-text variants.")
     args = parser.parse_args()
     if args.natural_repair and args.only_style != "natural":
         parser.error("--natural-repair requires --only-style natural")
@@ -201,12 +203,25 @@ def main():
         "run_id": run_id,
         "qa_status": "REVIEW",
         "no_drive_sync": True,
+        "delivery_prompt_version": "fluent-v2" if args.fluent_v2 else "legacy",
         "variants": {},
     }
     print("Creating exactly one or two separate full-sentence WAVs; NO automatic repeats.")
     wanted_styles = [args.only_style] if args.only_style else list(STYLES)
     for name in wanted_styles:
         prompt = STYLES[name]
+        if args.fluent_v2:
+            prompt = (
+                "Fluent, connected Czech spoken as one coherent question, with "
+                "steady natural rhythm. No hesitation, filler sounds, false starts, "
+                "or dramatic breaks. Only a light, short pause at the comma. "
+                "Clear Czech vowel lengths and consonants; do not change any words."
+                if name == "natural" else
+                "Clear, fluent Czech for an adult beginner at a slightly slower "
+                "teaching pace, with connected words and smooth natural intonation. "
+                "No hesitation, filler sounds, false starts, or drawn-out pauses. "
+                "Only a light, short pause at the comma; preserve each exact word."
+            )
         if args.natural_repair and name == "natural":
             prompt = (
                 "Authentic warm conversational Czech, measured and clear. "
@@ -225,6 +240,7 @@ def main():
         local_file = out_dir / filename
         local_file.write_bytes(wav_bytes)
         cloud_path = prefix + "/" + filename
+        metadata["style_prompt"] = prompt
         metadata["local_file"] = str(local_file)
         metadata["gcs_path"] = None if args.artifact_only else "gs://" + BUCKET + "/" + cloud_path
         receipt["variants"][name] = metadata
