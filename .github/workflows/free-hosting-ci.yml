@@ -50,6 +50,11 @@ jobs:
           python3 -m py_compile scripts/produce_curriculum_batch.py
           python3 scripts/produce_curriculum_batch.py --manifest production/manifest/2026-11-19-first-4-verified.json | tee /tmp/ahoj-lesson-dry-run.txt
           grep -q 'DRY_RUN_OK' /tmp/ahoj-lesson-dry-run.txt
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-first-4-verified.json \
+            --only-source CZ-A0-M01-L01-PH003 --only-style natural --repair-jm \
+            | tee /tmp/ahoj-jm-dry-run.txt
+          grep -q 'TTS_calls 1' /tmp/ahoj-jm-dry-run.txt
           python3 scripts/voice_quality_full_sentence.py > /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'DRY_RUN_OK' /tmp/ahoj-full-sentence-dry-run.txt
           grep -q 'Můžete mi prosím říct' /tmp/ahoj-full-sentence-dry-run.txt
