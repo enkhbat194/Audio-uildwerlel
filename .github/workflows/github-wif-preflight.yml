@@ -18,6 +18,7 @@ on:
       - production/requests/2026-11-19-dialogue-b01.json
       - production/requests/2026-11-19-dialogue-bat-repair.json
       - production/requests/2026-11-19-A0-L02-batch.json
+      - production/requests/2026-11-19-A0-L02-repair.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -523,5 +524,72 @@ jobs:
           path: |
             ${{ runner.temp }}/ahoj-a0-l02-phrases/
             ${{ runner.temp }}/ahoj-a0-l02-dialogue/
+          retention-days: 30
+          if-no-files-found: warn
+
+  lesson-a0-l02-repair-six:
+    name: L02 six bounded repairs using original failed receipts
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): repair L02 failed six once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout source-locked experimental branch
+        uses: actions/checkout@v4
+      - name: Verify target scripts syntax (no Cloud API requests)
+        run: python3 -m py_compile scripts/repair_l02_failed.py scripts/produce_curriculum_batch.py
+      - name: Download immutable previous private QA receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "${{ runner.temp }}/original-l02"
+          gh run download 44429237841 -n ahoj-a0-l02-private-qa-44429237841 \
+            -D "${{ runner.temp }}/original-l02"
+          test -s "${{ runner.temp }}/original-l02/ahoj-a0-l02-phrases/production_report.json"
+          test -s "${{ runner.temp }}/original-l02/ahoj-a0-l02-dialogue/production_report.json"
+          python3 scripts/repair_l02_failed.py \
+            --phrase-manifest production/manifest/2026-11-19-A0-L02-new-5-phrases.json \
+            --dialogue-manifest production/manifest/2026-11-19-A0-L02-B01-5-turns.json \
+            --existing-phrase-report "${{ runner.temp }}/original-l02/ahoj-a0-l02-phrases/production_report.json" \
+            --existing-dialogue-report "${{ runner.temp }}/original-l02/ahoj-a0-l02-dialogue/production_report.json" \
+            --output-dir "${{ runner.temp }}/l02-repairs" | grep DRY_RUN_OK
+      - name: Reuse existing keyless WIF, no long-lived secrets
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Install Czech ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Exactly six source-verified, no-retry TTS repairs with machine QA
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          python3 scripts/repair_l02_failed.py \
+            --phrase-manifest production/manifest/2026-11-19-A0-L02-new-5-phrases.json \
+            --dialogue-manifest production/manifest/2026-11-19-A0-L02-B01-5-turns.json \
+            --existing-phrase-report "${{ runner.temp }}/original-l02/ahoj-a0-l02-phrases/production_report.json" \
+            --existing-dialogue-report "${{ runner.temp }}/original-l02/ahoj-a0-l02-dialogue/production_report.json" \
+            --output-dir "${{ runner.temp }}/l02-repairs" --generate
+      - name: Preserve QA-approved and quarantined corrections with source fingerprints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-a0-l02-repairs-${{ github.run_id }}
+          path: ${{ runner.temp }}/l02-repairs/
           retention-days: 30
           if-no-files-found: warn
