@@ -68,6 +68,11 @@ jobs:
             --manifest production/manifest/2026-11-19-A0-L02-B01-5-turns.json \
             | tee /tmp/ahoj-l02-dialogue-dry.txt
           grep -q 'TTS_calls 5' /tmp/ahoj-l02-dialogue-dry.txt
+          for num in 01 02 03 04 05 06; do
+            python3 scripts/produce_curriculum_batch.py \
+              --manifest "production/manifest/2026-11-19-A0-private-bulk-${num}.json" \
+              | grep 'DRY_RUN_OK'
+          done
           python3 scripts/produce_curriculum_batch.py \
             --manifest production/manifest/2026-11-19-A0-dialogue-B01-editorial-private.json \
             --only-source CZ-A0-M01-L01-B01-T02 --only-style natural --repair-bat \
