@@ -26,7 +26,7 @@ MAX_REQUESTS = 16
 
 def source_validate(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("dataset_version") not in ("v0.9.20", "0.9.1-editorial-candidate"):
+    if data.get("dataset_version") not in ("v0.9.20", "0.9.1-editorial-candidate", "a0-master-registry-v1-private"):
         raise ValueError("Unsupported lesson text source version")
     if data.get("scope") != "PRIVATE_INTERNAL_STAGING_ONLY" or data.get("publish_allowed") is not False:
         raise ValueError("Production release not authorized")
@@ -52,7 +52,14 @@ def source_validate(path):
         seen.add(uid)
         if not isinstance(sentence, str) or not sentence or len(sentence) > 380 or "…" in sentence:
             raise ValueError("Empty or unresolved template source")
-        if row.get("text_sha256") != hashlib.sha256(sentence.encode("utf-8")).hexdigest():
+        exact_hash = hashlib.sha256(sentence.encode("utf-8")).hexdigest()
+        if data.get("dataset_version") == "a0-master-registry-v1-private":
+            # The read-only A0 Google Sheet records the first 12 SHA-256 hex digits.
+            # Freeze the FULL hash in the private production receipt at run time.
+            if row.get("source_sha256_12") != exact_hash[:12]:
+                raise ValueError("A0 registry source SHA12 mismatch " + uid)
+            row["text_sha256"] = exact_hash
+        elif row.get("text_sha256") != exact_hash:
             raise ValueError("Source text SHA256 mismatch " + uid)
         if row.get("source_gate") == "BLOCK_DOMAIN":
             raise ValueError("BLOCK_DOMAIN cannot enter production batch")
@@ -65,8 +72,10 @@ def source_validate(path):
         if row.get("source_gate") in (
             "draft_ai_not_native_reviewed",
             "draft_phrase_not_native_reviewed",
-        ) and data.get("dataset_version") != "0.9.1-editorial-candidate":
-            raise ValueError("Editorial-only candidate must use the isolated draft version")
+        ) and data.get("dataset_version") not in ("0.9.1-editorial-candidate", "a0-master-registry-v1-private"):
+            raise ValueError("Editorial-only candidate must use an isolated private draft version")
+        if data.get("dataset_version") == "a0-master-registry-v1-private" and row.get("kind") != "phrase":
+            raise ValueError("Legacy A0 registry bulk pilot explicitly excludes dialogues pending role provenance")
         if row.get("source_gate") == "draft_ai_not_native_reviewed" and row.get("kind") != "dialogue_turn":
             raise ValueError("Dialogue status is not a phrase authorization")
         if row.get("source_gate") == "draft_phrase_not_native_reviewed" and row.get("kind") != "phrase":
