@@ -1,0 +1,15 @@
+{
+  "original_run_id": 44436670518,
+  "purpose": "Retry ONLY the 51 genuine Gemini 3.8 Flash TTS requests that returned HTTP 429; retain all 42 AUTO_PASS and 3 quarantined WAVs unchanged.",
+  "max_extra_tts_calls": 51,
+  "model": "gemini-3.8-flash-tts",
+  "policy": "source-verified immutable, single-threaded, 12s spacing, 429 stop-after-3, automatic QA, user reviews quarantine in app, no curriculum publishing",
+  "source_manifests": [
+    "production/manifest/2026-11-19-A0-private-bulk-01.json",
+    "production/manifest/2026-11-19-A0-private-bulk-02.json",
+    "production/manifest/2026-11-19-A0-private-bulk-03.json",
+    "production/manifest/2026-11-19-A0-private-bulk-04.json",
+    "production/manifest/2026-11-19-A0-private-bulk-05.json",
+    "production/manifest/2026-11-19-A0-private-bulk-06.json"
+  ]
+}
