@@ -29,8 +29,12 @@ jobs:
           gh run download 44430059447 \
             -n ahoj-a0-l02-repairs-44430059447 -D /tmp/l02-natural-source
           test -s /tmp/l02-natural-source/repair_report.json
-      - name: Install offline Czech transcription
-        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Install offline Czech transcription and ffmpeg
+        run: |
+          python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          command -v ffmpeg
       - name: Change only tempo of approved Natural, then automatically validate
         run: |
           python3 -m py_compile scripts/derive_l02_slow_from_passed.py
