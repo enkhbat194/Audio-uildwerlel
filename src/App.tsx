@@ -4,6 +4,7 @@ import { AppHeader, type NavTabId } from './components/AppHeader';
 import { AuthGate } from './components/AuthGate';
 import { DashboardView } from './components/DashboardView';
 import { FilesSettingsView } from './components/FilesSettingsView';
+import { BatchReviewView } from './components/BatchReviewView';
 import { ListeningQaView } from './components/ListeningQaView';
 import { ProductionView } from './components/ProductionView';
 import { SourceRegistryView } from './components/SourceRegistryView';
@@ -500,7 +501,9 @@ export default function App() {
             )}
 
             {activeTab === 'qa' && (
-              <ListeningQaView
+              <div className="space-y-6">
+                <BatchReviewView />
+                <ListeningQaView
                 sources={state.sources}
                 realJobs={state.real_jobs}
                 mockJobs={state.mock_jobs}
@@ -512,6 +515,7 @@ export default function App() {
                 onSelectStyle={setSelectedQaStyle}
                 onSaveQa={handleSaveQa}
               />
+              </div>
             )}
 
             {activeTab === 'files' && (
