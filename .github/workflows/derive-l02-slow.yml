@@ -1,0 +1,48 @@
+name: Audio Factory - derive L02 slow and auto-QA (no TTS)
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - scripts/derive_l02_slow_from_passed.py
+      - .github/workflows/derive-l02-slow.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  derive-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download verified Natural correction; no TTS, Google IAM or Drive access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p /tmp/l02-natural-source
+          gh run download 44430059447 \
+            -n ahoj-a0-l02-repairs-44430059447 -D /tmp/l02-natural-source
+          test -s /tmp/l02-natural-source/repair_report.json
+      - name: Install offline Czech transcription
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Change only tempo of approved Natural, then automatically validate
+        run: |
+          python3 -m py_compile scripts/derive_l02_slow_from_passed.py
+          ffmpeg -version | head -n 1
+          python3 scripts/derive_l02_slow_from_passed.py \
+            --repair-dir /tmp/l02-natural-source \
+            --out-dir /tmp/l02-derived
+      - name: Preserve audit report and audio, even if the QA failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-l02-one-derived-slow-${{ github.run_id }}
+          path: /tmp/l02-derived/
+          retention-days: 30
+          if-no-files-found: warn
