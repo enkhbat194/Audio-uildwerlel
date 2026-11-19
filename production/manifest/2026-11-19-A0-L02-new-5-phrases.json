@@ -1,0 +1,84 @@
+{
+  "dataset_version": "0.9.1-editorial-candidate",
+  "source_authority": "A0_CANDIDATE_LESSONS_v0_9_1.json within AHOJ_CESKO_A0_A1_EDITORIAL_QA_v0_9_1.zip, lesson CZ-A0-M01-L02",
+  "scope": "PRIVATE_INTERNAL_STAGING_ONLY",
+  "publish_allowed": false,
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "release_reason": "Native Czech, Mongolian pedagogy, and learner calibration pending; machine QA is not publishing authorization.",
+  "batch_id": "AHOJ_A0_M01_L02_PHRASES_20261119",
+  "variants": [
+    "natural",
+    "learning_slow"
+  ],
+  "max_billable_requests": 10,
+  "excluded_duplicate_reuse": {
+    "source_id": "CZ-A0-M01-L02-PH006",
+    "cs_exact": "Dobrý den.",
+    "text_sha256": "d00f594ba38748a33a764dcbb341c5618ef80c4a8a49821e00dd9226088dd370",
+    "reuse_from": "CZ-A0-M01-L01-PH001",
+    "reason": "same exact source and teacher voice variants already exist; no additional TTS billing"
+  },
+  "rows": [
+    {
+      "source_id": "CZ-A0-M01-L02-PH001",
+      "lesson_id": "CZ-A0-M01-L02",
+      "cs_exact": "Ahoj.",
+      "text_sha256": "9a83f033d960ac318deda721a98636f283b8a06cc235073c19bf0e89c131ae65",
+      "source_gate": "draft_phrase_not_native_reviewed",
+      "kind": "phrase",
+      "register": "informal",
+      "speaker_role": "adult_teacher",
+      "intent": "polite_greeting",
+      "emotion": "polite_warmth"
+    },
+    {
+      "source_id": "CZ-A0-M01-L02-PH002",
+      "lesson_id": "CZ-A0-M01-L02",
+      "cs_exact": "Jak se jmenuješ?",
+      "text_sha256": "263329b12ac74b98f56cf1da8b8c4f64bd471d07c6055dbba1e3f83ede8363bd",
+      "source_gate": "draft_phrase_not_native_reviewed",
+      "kind": "phrase",
+      "register": "informal",
+      "speaker_role": "adult_teacher",
+      "intent": "polite_question",
+      "emotion": "curious"
+    },
+    {
+      "source_id": "CZ-A0-M01-L02-PH003",
+      "lesson_id": "CZ-A0-M01-L02",
+      "cs_exact": "Odkud jsi?",
+      "text_sha256": "7c53c94024bd504f1d08fac4859eaa3a70ff3e544c5ab809b9a91be71b391beb",
+      "source_gate": "draft_phrase_not_native_reviewed",
+      "kind": "phrase",
+      "register": "informal",
+      "speaker_role": "adult_teacher",
+      "intent": "polite_question",
+      "emotion": "curious"
+    },
+    {
+      "source_id": "CZ-A0-M01-L02-PH004",
+      "lesson_id": "CZ-A0-M01-L02",
+      "cs_exact": "A ty?",
+      "text_sha256": "66716ff947ad3090d6a7c51366d9734281b35587942dd52e6234e23b1b1908ae",
+      "source_gate": "draft_phrase_not_native_reviewed",
+      "kind": "phrase",
+      "register": "informal",
+      "speaker_role": "adult_teacher",
+      "intent": "polite_question",
+      "emotion": "neutral"
+    },
+    {
+      "source_id": "CZ-A0-M01-L02-PH005",
+      "lesson_id": "CZ-A0-M01-L02",
+      "cs_exact": "Já jsem Eva.",
+      "text_sha256": "83f52acebaceda81eee136f9cf398227ebb42296395a11df2aa1962faa25fde9",
+      "source_gate": "draft_phrase_not_native_reviewed",
+      "kind": "phrase",
+      "register": "informal",
+      "speaker_role": "adult_teacher",
+      "intent": "self_introduction",
+      "emotion": "polite_warmth"
+    }
+  ]
+}
