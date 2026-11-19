@@ -1,0 +1,16 @@
+{
+  "id": "A0_L02_REPAIR_ONLY_PREVIOUS_FAILED",
+  "source_run_id": 44429237841,
+  "targets": [
+    "CZ-A0-M01-L02-PH003__natural",
+    "CZ-A0-M01-L02-PH003__learning_slow",
+    "CZ-A0-M01-L02-PH004__natural",
+    "CZ-A0-M01-L02-PH004__learning_slow",
+    "CZ-A0-M01-L02-B01-T03__natural",
+    "CZ-A0-M01-L02-B01-T05__natural"
+  ],
+  "max_extra_billable_calls": 6,
+  "release_allowed": false,
+  "retry_network_errors": false,
+  "reason": "Fix actual Czech ASR anomalies with source-specific articulation rather than asking owner to manually QA"
+}
