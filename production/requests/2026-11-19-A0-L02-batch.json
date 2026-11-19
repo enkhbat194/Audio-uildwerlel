@@ -1,0 +1,19 @@
+{
+  "run_id": "A0-L02-20261119-PRIVATE-ONE-SHOT",
+  "source_mn": "A0 хичээл 2: албан ба энгийн харилцааны ялгаа",
+  "manifests": [
+    "production/manifest/2026-11-19-A0-L02-new-5-phrases.json",
+    "production/manifest/2026-11-19-A0-L02-B01-5-turns.json"
+  ],
+  "phrase_audio": 10,
+  "dialogue_turn_audio": 5,
+  "max_billable_tts_requests": 15,
+  "duplicate_reuse": "Dobrý den. uses prior A0-L01 teacher source; no regeneration",
+  "automatic_machine_qa": true,
+  "manual_qa_not_required": true,
+  "no_auto_retry_on_ambiguous_billing": true,
+  "quarantine_on_failure": true,
+  "release_allowed": false,
+  "storage_scope": "private GitHub Actions artifact pending curated Drive storage",
+  "owner_context": "User instructed continued active audio production of Ahoj Cesko adult Czech teaching and dialogue tracks."
+}
