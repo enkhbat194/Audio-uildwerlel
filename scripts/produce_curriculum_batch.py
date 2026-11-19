@@ -56,12 +56,21 @@ def source_validate(path):
             raise ValueError("Source text SHA256 mismatch " + uid)
         if row.get("source_gate") == "BLOCK_DOMAIN":
             raise ValueError("BLOCK_DOMAIN cannot enter production batch")
-        if row.get("source_gate") not in ("language_prosody_review", "draft_ai_not_native_reviewed"):
-            raise ValueError("Unexpected source gate")
-        if row.get("source_gate") == "draft_ai_not_native_reviewed" and (
-            row.get("kind") != "dialogue_turn" or data.get("dataset_version") != "0.9.1-editorial-candidate"
+        if row.get("source_gate") not in (
+            "language_prosody_review",
+            "draft_ai_not_native_reviewed",
+            "draft_phrase_not_native_reviewed",
         ):
-            raise ValueError("Editorial candidate can only be synthesized as a private dialogue test")
+            raise ValueError("Unexpected source gate")
+        if row.get("source_gate") in (
+            "draft_ai_not_native_reviewed",
+            "draft_phrase_not_native_reviewed",
+        ) and data.get("dataset_version") != "0.9.1-editorial-candidate":
+            raise ValueError("Editorial-only candidate must use the isolated draft version")
+        if row.get("source_gate") == "draft_ai_not_native_reviewed" and row.get("kind") != "dialogue_turn":
+            raise ValueError("Dialogue status is not a phrase authorization")
+        if row.get("source_gate") == "draft_phrase_not_native_reviewed" and row.get("kind") != "phrase":
+            raise ValueError("Phrase draft status is not a dialogue authorization")
         if row.get("kind") not in ("phrase", "dialogue_turn"):
             raise ValueError("Unknown utterance kind")
         if row.get("intent") not in ALLOWED_INTENTS or row.get("emotion") not in ALLOWED_EMOTIONS:
