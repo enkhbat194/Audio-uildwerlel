@@ -1,0 +1,24 @@
+{
+  "request_id": "A0_48_PHRASES_GEMINI38_PRIVATE_BULK_20261119",
+  "manifests": [
+    "production/manifest/2026-11-19-A0-private-bulk-01.json",
+    "production/manifest/2026-11-19-A0-private-bulk-02.json",
+    "production/manifest/2026-11-19-A0-private-bulk-03.json",
+    "production/manifest/2026-11-19-A0-private-bulk-04.json",
+    "production/manifest/2026-11-19-A0-private-bulk-05.json",
+    "production/manifest/2026-11-19-A0-private-bulk-06.json"
+  ],
+  "total_new_phrases": 48,
+  "variants": [
+    "natural",
+    "learning_slow"
+  ],
+  "model": "gemini-3.8-flash-tts",
+  "max_total_billable_requests": 96,
+  "owner_confirmed_mass_production": true,
+  "source": "A0 master registry (exact text, SHA12, release blocked)",
+  "intent": "private staging with automatic ASR, quarantines reviewed in Audio Factory app",
+  "not_published": true,
+  "no_auto_retries": true,
+  "source_excludes": "placeholders, safety editorial holds, direct previously generated duplicates"
+}
