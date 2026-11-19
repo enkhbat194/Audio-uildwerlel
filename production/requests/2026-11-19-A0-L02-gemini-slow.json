@@ -1,0 +1,16 @@
+{
+  "request_id": "A0_L02_PH004_GEMINI_LEARNING_SLOW",
+  "lesson_id": "CZ-A0-M01-L02",
+  "source_id": "CZ-A0-M01-L02-PH004",
+  "cs_exact": "A ty?",
+  "speech_style": "learning_slow",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "synthetic_time_stretch_allowed": false,
+  "source_manifest": "production/manifest/2026-11-19-A0-L02-new-5-phrases.json",
+  "max_billable_tts_requests": 1,
+  "retries": 0,
+  "production_release": false,
+  "qa": "AUTO_PASS or QUARANTINED for owner review",
+  "reason": "User explicitly requires all learning_slow speech assets to be genuinely synthesized by Gemini 3.8 Flash TTS."
+}
