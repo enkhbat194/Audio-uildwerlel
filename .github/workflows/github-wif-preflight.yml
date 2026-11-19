@@ -17,6 +17,7 @@ on:
       - production/requests/2026-11-19-repair-jm.json
       - production/requests/2026-11-19-dialogue-b01.json
       - production/requests/2026-11-19-dialogue-bat-repair.json
+      - production/requests/2026-11-19-A0-L02-batch.json
   workflow_dispatch:
     inputs:
       generate_two_wavs:
@@ -451,5 +452,76 @@ jobs:
         with:
           name: ahoj-dialogue-bat-repair-${{ github.run_id }}
           path: ${{ runner.temp }}/ahoj-dialogue-bat-repair/
+          retention-days: 30
+          if-no-files-found: warn
+
+  lesson-a0-l02-private-batch:
+    name: A0 L02 (10 teacher clips + 5 dialogue turns) — source-bound auto QA
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): A0 L02 first 15 clips'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout reviewed A0 source manifests
+        uses: actions/checkout@v4
+      - name: Authenticate via existing limited GitHub WIF identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Prepare local Czech Whisper automatic QA
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Generate five new teacher phrases, two styles each (max 10 TTS calls)
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-A0-L02-new-5-phrases.json \
+            --out-dir "${{ runner.temp }}/ahoj-a0-l02-phrases" --generate
+          python3 - <<'PY'
+          import json,os
+          p=os.path.join(os.environ["RUNNER_TEMP"], "ahoj-a0-l02-phrases/production_report.json")
+          d=json.load(open(p))
+          assert d["attempted_calls"] <= 10 and len(d["rows"])==10 and d["release_allowed"] is False
+          print("L02_PHRASES_QA_COUNTS",d["counts"])
+          PY
+      - name: Generate five source-grounded dialogue turns, two characters (max 5 TTS calls)
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/produce_curriculum_batch.py \
+            --manifest production/manifest/2026-11-19-A0-L02-B01-5-turns.json \
+            --out-dir "${{ runner.temp }}/ahoj-a0-l02-dialogue" --generate
+          python3 - <<'PY'
+          import json,os
+          p=os.path.join(os.environ["RUNNER_TEMP"], "ahoj-a0-l02-dialogue/production_report.json")
+          d=json.load(open(p))
+          assert d["attempted_calls"] <= 5 and len(d["rows"])==5 and d["release_allowed"] is False
+          print("L02_DIALOGUE_QA_COUNTS",d["counts"])
+          PY
+      - name: Retain local private WAV and per-source machine QA (including rejects)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-a0-l02-private-qa-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ahoj-a0-l02-phrases/
+            ${{ runner.temp }}/ahoj-a0-l02-dialogue/
           retention-days: 30
           if-no-files-found: warn
