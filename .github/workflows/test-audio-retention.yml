@@ -1,0 +1,26 @@
+name: Audio Factory - preserve every failed QA WAV
+on:
+  pull_request:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - scripts/produce_curriculum_batch.py
+      - scripts/build_owner_review_queue.py
+      - tests/test_preserve_raw_audio.py
+      - .github/workflows/test-audio-retention.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax, immutable WAV and quarantine tests (NO TTS)
+        run: |
+          python -m py_compile scripts/produce_curriculum_batch.py scripts/build_owner_review_queue.py tests/test_preserve_raw_audio.py
+          python -m unittest discover -s tests -p test_preserve_raw_audio.py -v
