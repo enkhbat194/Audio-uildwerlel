@@ -1,0 +1,59 @@
+name: Alphabet Czech medium-ASR recovery — no new TTS
+on:
+  push:
+    branches: [experiment/free-hosting-render-20261118]
+    paths:
+      - .github/workflows/alphabet-medium-recheck.yml
+permissions:
+  contents: write
+  actions: read
+jobs:
+  recheck-remaining-word-wavs:
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(qa): medium recheck pack02-09 no TTS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download original eight packs from fixed one-shot run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/alphabet-original"
+          for n in 02 03 04 05 06 07 08 09; do
+            mkdir -p "${{ runner.temp }}/alphabet-original/pack$n"
+            gh run download 44748388026 -n "ahoj-alphabet-pack$n-44748388026" -D "${{ runner.temp }}/alphabet-original/pack$n" || echo "MISSING_ORIGINAL_PACK_$n"
+          done
+      - name: Install offline Czech medium ASR, no Google API
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Verify original WAV SHA and exact Czech word transcript
+        env:
+          AHOJ_PACK_ARTIFACT_ROOT: ${{ runner.temp }}/alphabet-original
+        run: python3 scripts/recheck_all_alphabet_words.py
+      - name: Commit only exact ASR-pass WAVs, preserve release blocks
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add production/alphabet-preview/
+          git commit -m 'audio(assets): offline medium-ASR verified Czech alphabet Preview [skip ci]'
+          git fetch origin experiment/free-hosting-render-20261118
+          git rebase origin/experiment/free-hosting-render-20261118
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Save QA audit and unresolved source IDs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabet-medium-recheck-${{ github.run_id }}
+          path: production/alphabet-preview/medium-qa-report.json
+          retention-days: 30
+          if-no-files-found: warn

@@ -996,3 +996,73 @@ jobs:
             production/alphabet-preview/pack${{ matrix.pack }}/
           retention-days: 30
           if-no-files-found: warn
+
+
+  alphabet-pack01-repair-two:
+    name: Pack01 two Czech word repairs — 2 Gemini calls maximum
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): repair pack01 two words with Gemini 3.8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate script and exact immutable source before TTS
+        run: |
+          python3 -m py_compile scripts/repair_alphabet_pack01_two.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('production/alphabet-preview/pack01/manifest.json').read_text())
+          rows=[r for r in d['rows'] if r['kind']=='sound_in_word' and r['letterId'] in ('C','Č')]
+          assert len(rows)==2 and all(not r['previewAllowed'] for r in rows)
+          assert d['publicationAllowed'] is False
+          print('REPAIR_PRECHECK_TWO_CZECH_WORDS_ONLY')
+          PY
+      - name: Existing branch/workflow-locked WIF, no secrets
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Offline Czech ASR, no paid QA API
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Exactly two bounded Czech pronunciation repairs and QA
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_ALPHABET_REPAIR_OUT: ${{ runner.temp }}/alphabet-repair-two
+          GITHUB_ACTIONS: 'true'
+        run: python3 scripts/repair_alphabet_pack01_two.py
+      - name: Commit only exact ASR pass Preview clips, preserve failed receipts
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add production/alphabet-preview/pack01
+          git commit -m 'audio(assets): bounded pack01 Czech repairs [skip ci]'
+          git fetch origin experiment/free-hosting-render-20261118
+          git rebase origin/experiment/free-hosting-render-20261118
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Preserve quarantined originals and immutable repair receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabet-pack01-repair-two-${{ github.run_id }}
+          path: ${{ runner.temp }}/alphabet-repair-two/
+          retention-days: 30
+          if-no-files-found: warn
