@@ -1,0 +1,54 @@
+name: Ahoj alphabet — offline medium-ASR quarantine recheck
+on:
+  push:
+    branches: [experiment/free-hosting-render-20261118]
+    paths:
+      - .github/workflows/alphabet-qa-recheck.yml
+permissions:
+  contents: write
+  actions: read
+jobs:
+  recheck-three:
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(qa): recheck pack01 three quarantines'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download original generated WAVs, no new Gemini request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "${{ runner.temp }}/original-alphabet"
+          gh run download 44747265771 -n ahoj-alphabet-pack01-44747265771 -D "${{ runner.temp }}/original-alphabet"
+          find "${{ runner.temp }}/original-alphabet" -name '*.wav' | wc -l
+      - name: Install independent offline Czech medium ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Compare exact Czech transcript and immutable original WAV SHA
+        env:
+          AHOJ_ORIGINAL_ALPHABET_ARTIFACT: ${{ runner.temp }}/original-alphabet
+        run: python3 scripts/recheck_alphabet_quarantine.py
+      - name: Commit only promoted QA pass WAVs; no native/publication approval
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add production/alphabet-preview/pack01
+          git commit -m 'audio(assets): medium-ASR verified alphabet Preview WAVs [skip ci]'
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Keep SHA and QA receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-alphabet-pack01-medium-qa-${{ github.run_id }}
+          path: production/alphabet-preview/pack01/manifest.json
+          retention-days: 30
+          if-no-files-found: warn
