@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P03",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "F",
+      "slug": "F",
+      "name": "Písmeno F.",
+      "word": "film"
+    },
+    {
+      "id": "G",
+      "slug": "G",
+      "name": "Písmeno G.",
+      "word": "guma"
+    },
+    {
+      "id": "H",
+      "slug": "H",
+      "name": "Písmeno H.",
+      "word": "hrad"
+    },
+    {
+      "id": "CH",
+      "slug": "CH",
+      "name": "Písmeno CH, české ch.",
+      "word": "chléb"
+    },
+    {
+      "id": "I",
+      "slug": "I",
+      "name": "Písmeno I, měkké i.",
+      "word": "informace"
+    }
+  ]
+}
