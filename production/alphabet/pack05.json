@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P05",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "N",
+      "slug": "N",
+      "name": "Písmeno N.",
+      "word": "nos"
+    },
+    {
+      "id": "Ň",
+      "slug": "N_CARON",
+      "name": "Písmeno Ň, ň s háčkem.",
+      "word": "kůň"
+    },
+    {
+      "id": "O",
+      "slug": "O",
+      "name": "Písmeno O.",
+      "word": "oko"
+    },
+    {
+      "id": "Ó",
+      "slug": "O_ACUTE",
+      "name": "Písmeno Ó, dlouhé ó.",
+      "word": "tón"
+    },
+    {
+      "id": "P",
+      "slug": "P",
+      "name": "Písmeno P.",
+      "word": "práce"
+    }
+  ]
+}
