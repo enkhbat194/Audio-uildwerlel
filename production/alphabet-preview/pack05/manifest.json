@@ -249,9 +249,57 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "GENERATION_FAILED",
-      "error": "HTTP 429: {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.\",\n    \"status\": \"RESOURCE_EXHAUSTED\"\n  }\n}\n"
+      "previewAllowed": true,
+      "decision": "TECHNICAL_PREVIEW",
+      "error": "HTTP 429: {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.\",\n    \"status\": \"RESOURCE_EXHAUSTED\"\n  }\n}\n",
+      "repoPath": "production/alphabet-preview/pack05/O_ACUTE__letter_name.wav",
+      "audioSha256": "0b94ed6f2a5b205e41ffcef576e21dd271977287bebd7e22cc788cf550e49523",
+      "durationMs": 4440,
+      "retryOf429": true,
+      "quota429Retry": [
+        {
+          "pack": "pack05",
+          "sourceId": "CZ-ALPHA-Ó",
+          "csExact": "Písmeno Ó, dlouhé ó.",
+          "model": "gemini-3.8-flash-tts",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "0b94ed6f2a5b205e41ffcef576e21dd271977287bebd7e22cc788cf550e49523",
+            "duration_seconds": 4.44,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -16.91,
+            "peak_dbfs": 0.0,
+            "clipped_fraction": 2.8e-05,
+            "silent_window_fraction": 0.3919,
+            "internal_pauses": [
+              {
+                "from_seconds": 1.04,
+                "to_seconds": 1.2,
+                "duration_seconds": 0.16
+              },
+              {
+                "from_seconds": 1.72,
+                "to_seconds": 2.44,
+                "duration_seconds": 0.72
+              },
+              {
+                "from_seconds": 3.32,
+                "to_seconds": 3.58,
+                "duration_seconds": 0.26
+              }
+            ],
+            "max_internal_pause_seconds": 0.72
+          },
+          "audioSha256": "0b94ed6f2a5b205e41ffcef576e21dd271977287bebd7e22cc788cf550e49523",
+          "durationMs": 4440,
+          "decision": "TECHNICAL_PREVIEW"
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-Ó",

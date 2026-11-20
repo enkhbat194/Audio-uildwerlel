@@ -323,9 +323,47 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "GENERATION_FAILED",
-      "error": "HTTP 429: {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.\",\n    \"status\": \"RESOURCE_EXHAUSTED\"\n  }\n}\n"
+      "previewAllowed": true,
+      "decision": "TECHNICAL_PREVIEW",
+      "error": "HTTP 429: {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.\",\n    \"status\": \"RESOURCE_EXHAUSTED\"\n  }\n}\n",
+      "repoPath": "production/alphabet-preview/pack03/I__letter_name.wav",
+      "audioSha256": "90478d36ee2f3e28fcb0e455c878a043abf163245d86c91c1cc407b5f769b11f",
+      "durationMs": 3280,
+      "retryOf429": true,
+      "quota429Retry": [
+        {
+          "pack": "pack03",
+          "sourceId": "CZ-ALPHA-I",
+          "csExact": "Písmeno I, měkké i.",
+          "model": "gemini-3.8-flash-tts",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "90478d36ee2f3e28fcb0e455c878a043abf163245d86c91c1cc407b5f769b11f",
+            "duration_seconds": 3.28,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -18.99,
+            "peak_dbfs": -3.15,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.4364,
+            "internal_pauses": [
+              {
+                "from_seconds": 1.36,
+                "to_seconds": 2.0,
+                "duration_seconds": 0.64
+              }
+            ],
+            "max_internal_pause_seconds": 0.64
+          },
+          "audioSha256": "90478d36ee2f3e28fcb0e455c878a043abf163245d86c91c1cc407b5f769b11f",
+          "durationMs": 3280,
+          "decision": "TECHNICAL_PREVIEW"
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-I",
