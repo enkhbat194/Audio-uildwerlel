@@ -66,8 +66,8 @@ jobs:
         uses: google-github-actions/auth@v3
         id: auth
         with:
-          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
-          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-chirp-ab20/providers/only-github-ab20
+          service_account: ahoj-chirp20@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
           token_format: access_token
           access_token_lifetime: 1200s
           create_credentials_file: false
