@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P09",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "X",
+      "slug": "X",
+      "name": "Písmeno X, iks.",
+      "word": "taxi"
+    },
+    {
+      "id": "Y",
+      "slug": "Y",
+      "name": "Písmeno Y, tvrdé y.",
+      "word": "syn"
+    },
+    {
+      "id": "Ý",
+      "slug": "Y_ACUTE",
+      "name": "Písmeno Ý, dlouhé tvrdé ý.",
+      "word": "dobrý"
+    },
+    {
+      "id": "Z",
+      "slug": "Z",
+      "name": "Písmeno Z.",
+      "word": "zima"
+    },
+    {
+      "id": "Ž",
+      "slug": "Z_CARON",
+      "name": "Písmeno Ž, ž s háčkem.",
+      "word": "žena"
+    }
+  ]
+}
