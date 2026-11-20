@@ -234,6 +234,7 @@ def main():
     }
     (output / "approved").mkdir(exist_ok=True)
     (output / "quarantine").mkdir(exist_ok=True)
+    (output / "raw").mkdir(exist_ok=True)  # Immutable original TTS: never polish or delete
     for source in cfg["rows"]:
         for style in cfg["variants"]:
             uid = source["source_id"]
@@ -243,6 +244,7 @@ def main():
                       "speaker_role": source["speaker_role"], "dialogue_id": source.get("dialogue_id"),
                       "persona_gender": source.get("persona_gender"),
                       "source_gate": source["source_gate"], "publication_gate": "BLOCKED_FOR_RELEASE"}
+            raw_path = None
             try:
                 direction = voice_direction(source, style)
                 if args.repair_jm:
@@ -261,6 +263,13 @@ def main():
                 mode_label = "dialogue-v1" if source["kind"] == "dialogue_turn" else "teacher-v1"
                 filename = f"{uid}__{style}__{mode_label}__{cast_voice}__{original_audio_sha[:12]}.wav"
                 tmp = output / filename
+                # Keep exact, immutable model output before silence repair or QA.
+                # A human reviewer can compare the original with any processed variant.
+                raw_path = output / "raw" / filename
+                with raw_path.open("xb") as original_file:
+                    original_file.write(audio)
+                record["raw_storage_relative_path"] = str(raw_path.relative_to(output))
+                record["raw_audio_sha256"] = original_audio_sha
                 tmp.write_bytes(audio)
                 technical_preview = inspect_wav(tmp)
                 gap_limit = 0.34 if style == "natural" else 0.38
@@ -280,15 +289,30 @@ def main():
                                "original_audio_sha256": original_audio_sha,
                                "duration_ms": round(1000 * quality["technical"].get("duration_seconds", 0)),
                                "wav_bytes": len(audio), "model": MODEL, "voice": cast_voice,
-                               "voice_prompt": direction, "qa": quality})
+                               "voice_prompt": direction, "qa": quality,
+                               "owner_review_status": ("PENDING" if quality["decision"] != "AUTO_PASS"
+                                                       else "OPTIONAL")})
                 print("QA", uid, style, quality["decision"], "pause_seconds",
                       quality["technical"].get("max_internal_pause_seconds"), flush=True)
                 report["counts"][quality["decision"]] += 1
             except Exception as exc:
-                record.update({"decision": "GENERATION_FAILED",
-                               "error": str(exc)[:400], "potentially_billed": True})
-                report["counts"]["GENERATION_FAILED"] += 1
-                print("FAIL", uid, style, str(exc)[:200], file=sys.stderr, flush=True)
+                # If TTS already returned bytes, an ASR/QA or filesystem failure is
+                # NOT a missing TTS generation. Preserve the original for owner QA.
+                if raw_path is not None and raw_path.is_file():
+                    record.update({"decision": "QUARANTINED",
+                                   "owner_review_status": "PENDING",
+                                   "qa_pipeline_error": str(exc)[:400],
+                                   "raw_storage_relative_path": str(raw_path.relative_to(output)),
+                                   "raw_audio_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+                                   "potentially_billed": True})
+                    report["counts"]["QUARANTINED"] += 1
+                    print("QUARANTINE_RAW_AFTER_ERROR", uid, style,
+                          str(exc)[:200], file=sys.stderr, flush=True)
+                else:
+                    record.update({"decision": "GENERATION_FAILED",
+                                   "error": str(exc)[:400], "potentially_billed": True})
+                    report["counts"]["GENERATION_FAILED"] += 1
+                    print("FAIL", uid, style, str(exc)[:200], file=sys.stderr, flush=True)
             report["rows"].append(record)
             (output / "production_report.json").write_text(
                 json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
