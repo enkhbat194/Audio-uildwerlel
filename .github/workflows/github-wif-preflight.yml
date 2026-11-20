@@ -1126,3 +1126,72 @@ jobs:
           path: ${{ runner.temp }}/ahoj-alphabet-429/
           retention-days: 30
           if-no-files-found: warn
+
+
+  alphabet-context-fallback-thirteen:
+    name: 13 Czech contextual fallback WAVs — Gemini 3.8 + ASR, no retries
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): 13 Czech contextual fallbacks Gemini 3.8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and verify frozen 13-row manifest
+        run: |
+          python3 -m py_compile scripts/generate_alphabet_context_fallback.py
+          python3 - <<'PY'
+          import json
+          d=json.load(open('production/alphabet/context-fallback-20261120.json'))
+          assert d['maxBillableCalls']==len(d['rows'])==13
+          assert d['noAutomaticRetries'] is True
+          assert d['scope']=='PREVIEW_ONLY_NO_NATIVE_CERTIFICATION'
+          print('CONTEXT_13_BOUNDED_SOURCE_VALIDATED')
+          PY
+      - name: Existing branch/workflow-locked Google WIF
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Install offline Czech Whisper ASR
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Generate max 13 exact Czech sentence/name WAVs, QA and quarantine
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_CONTEXT_OUT: ${{ runner.temp }}/alphabet-context
+          GITHUB_ACTIONS: 'true'
+        run: python3 scripts/generate_alphabet_context_fallback.py
+      - name: Commit only real QA-gated Preview WAVs and exact source hashes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add production/alphabet-preview/pack01 production/alphabet-preview/pack02 production/alphabet-preview/pack03 production/alphabet-preview/pack05 production/alphabet-preview/pack06 production/alphabet-preview/pack07 production/alphabet-preview/pack08
+          git commit -m 'audio(assets): contextual Czech Gemini 3.8 Preview WAVs [skip ci]'
+          git fetch origin experiment/free-hosting-render-20261118
+          git rebase origin/experiment/free-hosting-render-20261118
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Preserve all quarantines and immutable receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabet-context-fallback-${{ github.run_id }}
+          path: ${{ runner.temp }}/alphabet-context/
+          retention-days: 30
+          if-no-files-found: warn
