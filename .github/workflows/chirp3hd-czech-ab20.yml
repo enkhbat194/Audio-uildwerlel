@@ -1,0 +1,104 @@
+name: Ahoj - Czech Gemini vs Chirp 3 HD 20-sentence private AB
+on:
+  pull_request:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - scripts/produce_chirp_czech_ab20.py
+      - scripts/qa_chirp_comparison.py
+      - tests/test_chirp_czech_ab20.py
+      - production/ab_comparison/2026-11-21-gemini38-vs-chirp3hd-20.json
+      - .github/workflows/chirp3hd-czech-ab20.yml
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - production/ab_comparison/2026-11-21-ab20-one-shot-trigger.txt
+  workflow_dispatch:
+    inputs:
+      run_billable_comparison:
+        description: 'Generate at most 20 Czech Chirp3HD WAVs (billable, saved privately)?'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Validate immutable inputs / no-delete tests (NO TTS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source SHA, max 20 calls, quarantine and no retries
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/produce_chirp_czech_ab20.py scripts/qa_chirp_comparison.py tests/test_chirp_czech_ab20.py
+          python -m unittest discover -s tests -p test_chirp_czech_ab20.py -v
+          python scripts/produce_chirp_czech_ab20.py --max-requests 20
+
+  synthesize:
+    name: Exactly <= 20 billable Chirp HD calls, original WAVs archived
+    needs: offline-tests
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_billable_comparison == true) ||
+        (github.event_name == 'push' &&
+         github.event.head_commit.message == 'qa(run): chirp3hd-czech-ab20 exactly once')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AHOJ_CHIRP_AB_OUTPUT_DIR: ${{ runner.temp }}/ahoj-chirp-ab20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get short-lived GCP access token, never log secret
+        uses: google-github-actions/auth@v3
+        id: auth
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1200s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Synthesize Chirp 3 HD Czech 20 exact frozen sentences ONCE
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_CHIRP_AB_AUTHORIZED: YES_20_MAX
+          GITHUB_ACTIONS: 'true'
+        run: |
+          python scripts/produce_chirp_czech_ab20.py \
+            --manifest production/ab_comparison/2026-11-21-gemini38-vs-chirp3hd-20.json \
+            --out-dir "$AHOJ_CHIRP_AB_OUTPUT_DIR" \
+            --max-requests 20 --generate
+      - name: Set up offline Czech ASR (does not run Gemini or Chirp)
+        if: always()
+        run: |
+          python -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Score Czech transcript on saved WAVs; never delete or approve
+        if: always()
+        run: |
+          if test -f "$AHOJ_CHIRP_AB_OUTPUT_DIR/chirp_comparison_report.json"; then
+            python scripts/qa_chirp_comparison.py --out-dir "$AHOJ_CHIRP_AB_OUTPUT_DIR"
+          else
+            echo "No audio report created; check authentication and enabled Cloud TTS API."
+          fi
+      - name: Preserve EVERY generated raw WAV (including failed QA)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-czech-chirp3hd-ab20-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-chirp-ab20/
+          retention-days: 90
+          if-no-files-found: warn
