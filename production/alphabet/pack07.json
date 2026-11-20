@@ -1,0 +1,36 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P07",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 8,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "Š",
+      "slug": "S_CARON",
+      "name": "Písmeno Š, š s háčkem.",
+      "word": "škola"
+    },
+    {
+      "id": "T",
+      "slug": "T",
+      "name": "Písmeno T.",
+      "word": "tramvaj"
+    },
+    {
+      "id": "Ť",
+      "slug": "T_CARON",
+      "name": "Písmeno Ť, ť s háčkem.",
+      "word": "chuť"
+    },
+    {
+      "id": "U",
+      "slug": "U",
+      "name": "Písmeno U.",
+      "word": "ulice"
+    }
+  ]
+}
