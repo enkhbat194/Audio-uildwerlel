@@ -1,0 +1,48 @@
+name: Ahoj - archive existing alphabet WAVs (NO TTS)
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - .github/workflows/archive-existing-alphabet-20261120.yml
+permissions:
+  contents: read
+jobs:
+  archive:
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.event.head_commit.message == 'audio(archive): snapshot existing QA WAVs without TTS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Index and verify original alphabet WAV bytes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, hashlib, subprocess
+          root=pathlib.Path('production/alphabet-preview')
+          paths=sorted(root.glob('pack*/*.wav'))
+          if len(paths)<61:
+              raise SystemExit('Missing WAV source files: '+str(len(paths)))
+          rows=[]
+          for p in paths:
+              b=p.read_bytes()
+              if len(b)<44 or b[:4]!=b'RIFF' or b[8:12]!=b'WAVE':
+                  raise SystemExit('Invalid WAV: '+str(p))
+              rows.append(dict(path=str(p),sha256=hashlib.sha256(b).hexdigest(),size=len(b)))
+          index=dict(source_commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                     count=len(rows),publication_allowed=False,new_tts_requests=0,files=rows)
+          pathlib.Path('alphabet-sha256-index.json').write_text(
+              json.dumps(index,indent=2),encoding='utf-8')
+          print('EXISTING_WAV_COUNT',len(rows))
+          PY
+      - name: Preserve original WAVs and source manifest without generating TTS
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-alphabet-existing-snapshot
+          path: |
+            production/alphabet-preview/**/*
+            alphabet-sha256-index.json
+          retention-days: 30
+          if-no-files-found: error
