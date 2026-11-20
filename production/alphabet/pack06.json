@@ -1,0 +1,36 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P06",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 8,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "Q",
+      "slug": "Q",
+      "name": "Písmeno Q, kvé.",
+      "word": "quinoa"
+    },
+    {
+      "id": "R",
+      "slug": "R",
+      "name": "Písmeno R.",
+      "word": "ruka"
+    },
+    {
+      "id": "Ř",
+      "slug": "R_CARON",
+      "name": "Písmeno Ř, ř s háčkem.",
+      "word": "řeka"
+    },
+    {
+      "id": "S",
+      "slug": "S",
+      "name": "Písmeno S.",
+      "word": "sýr"
+    }
+  ]
+}
