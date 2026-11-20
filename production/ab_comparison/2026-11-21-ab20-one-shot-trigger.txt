@@ -1,0 +1,6 @@
+AB comparison trigger: exactly one authorized, capped at 20 Chirp 3 HD Czech synthesis requests.
+Baseline: 20 existing Gemini 3.8 Flash TTS natural WAVs; no duplicate Gemini calls.
+Source manifest: production/ab_comparison/2026-11-21-gemini38-vs-chirp3hd-20.json
+Preserve every original WAV, including machine-QA failures, for owner listening review.
+Private artifacts only. No publication. No automatic retries.
+Owner opted in to TTS comparison in conversation on 2026-11-21.
