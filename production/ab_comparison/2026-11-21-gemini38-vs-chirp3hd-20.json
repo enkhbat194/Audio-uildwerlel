@@ -1,0 +1,215 @@
+{
+  "comparison_id": "AHOJ_GEMINI38_VS_CHIRP3HD_CS_20_20261121",
+  "source_version": "v0.9.20",
+  "dataset_sha256": "bf6de3f4872353d13768e79cb53299bfe1927ca3927209334df3e7e548860a03",
+  "language_code": "cs-CZ",
+  "model": "chirp3-hd",
+  "voice": "cs-CZ-Chirp3-HD-Achernar",
+  "max_billable_requests": 20,
+  "publication_allowed": false,
+  "auto_delete": false,
+  "auto_retry": false,
+  "owner_review_required_for_failures": true,
+  "rows": [
+    {
+      "index": 1,
+      "source_id": "CZ-A0-M01-L01-PH001",
+      "cs_exact": "Dobrý den.",
+      "text_sha256": "d00f594ba38748a33a764dcbb341c5618ef80c4a8a49821e00dd9226088dd370",
+      "gemini_wav_sha256": "2c3e9fe9615602f6ac93c4fd2feba34a7203a9db0663ca790e2e4a6f77048943",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 2,
+      "source_id": "CZ-A0-M01-L01-PH003",
+      "cs_exact": "Jak se jmenujete?",
+      "text_sha256": "9e2b678bd1e7e3de4649ffb6c1d376649a2dc46d0b05e2a99994d784a99f54b3",
+      "gemini_wav_sha256": "f1ab43c5b8168d09d4a5bade1fd553d0778b0506d166eea4c85e4088d2807651",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 3,
+      "source_id": "CZ-A0-M01-L01-PH005",
+      "cs_exact": "Nerozumím.",
+      "text_sha256": "3dbe64054c73f1083313d5fb2f9b4a01edee2bf952835dd7cac380c247055985",
+      "gemini_wav_sha256": "ee9e52838e6668ba68b090e599365e261e97ece9e8166311d586140d58d24424",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 4,
+      "source_id": "CZ-A0-M01-L02-PH002",
+      "cs_exact": "Jak se jmenuješ?",
+      "text_sha256": "263329b12ac74b98f56cf1da8b8c4f64bd471d07c6055dbba1e3f83ede8363bd",
+      "gemini_wav_sha256": "249b0cde603155a1a6a484fd571631d69f437dc79721f3c69d17f703fcc0100b",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 5,
+      "source_id": "CZ-A0-M01-L03-PH002",
+      "cs_exact": "Ještě jednou, prosím.",
+      "text_sha256": "02fbcbd0520190849d2e4a11cbcd83ad51ec9bf2c4496fa8cf91704f9fe8d6a2",
+      "gemini_wav_sha256": "5f7b661d879594ed61e8b5e88b92f750badd89de3e039f446a1e39be2a1d012b",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 6,
+      "source_id": "CZ-A0-M01-L03-PH003",
+      "cs_exact": "Mě také.",
+      "text_sha256": "c7b9bc09bd882c2437bf0c3e981aa45e019acb87c8a1f5aaba79f0dd4e803c54",
+      "gemini_wav_sha256": "28efa11e5161e1d57416f6c4fe1b3296402ea518ab37f3f380518955d0ebc850",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 7,
+      "source_id": "CZ-A0-M01-L03-PH004",
+      "cs_exact": "Na shledanou.",
+      "text_sha256": "def5d49140ec4e4db1289c0c9f7d049990b2e1e4cd5c566252c806d7c9a4a0dd",
+      "gemini_wav_sha256": "ed959dc14055b08928fc466a15eff9913c113fea53013c27888c3759b8100e9c",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 8,
+      "source_id": "CZ-A0-M02-L01-PH002",
+      "cs_exact": "Promiňte, nerozumím.",
+      "text_sha256": "b4e43066de42657e632ecb271b229e8349eb9771b7952bf3527f75c50c5b7e99",
+      "gemini_wav_sha256": "9bab524e212f12fe78cda461d04e7c9033aed80858015e4508cc562097ffc1dc",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 9,
+      "source_id": "CZ-A0-M02-L01-PH003",
+      "cs_exact": "Co to znamená?",
+      "text_sha256": "4fb3eee8df604e20f5d533117790f4abe2efe285cce634601ed272d502d0ee04",
+      "gemini_wav_sha256": "af64dbfc49dcb56ff46e65f757896fa93ab4a47072ed1260e4b02b5d155bb3d4",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 10,
+      "source_id": "CZ-A0-M02-L02-PH002",
+      "cs_exact": "Můžete prosím mluvit pomaleji?",
+      "text_sha256": "5f49ce03a8225bac01faa513509208b0cd985ae3b6cd89fcdd9c3a4608c23897",
+      "gemini_wav_sha256": "08a829495cc13d789f110f0a90f46c3f19ca4a99d9c68da8200648907a97954d",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 11,
+      "source_id": "CZ-A0-M02-L03-PH002",
+      "cs_exact": "Můžete to říct jednodušeji?",
+      "text_sha256": "466dcfa847e569a1b28dd0ecb88bfd6a86a5838c50373922c11d76bec56f68de",
+      "gemini_wav_sha256": "958f10e06a5249f1a4edda439b9f4b777aa8253d80e88df9ab60329487182719",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 12,
+      "source_id": "CZ-A0-M02-L03-PH004",
+      "cs_exact": "Ano, přesně tak.",
+      "text_sha256": "829a968137a6939c8fa61d449156b2d450f961242396f5c377d53876e9523c39",
+      "gemini_wav_sha256": "d08382df5ca2266784f37314009512d428a2eb659837e1f84db585dc69db418f",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 13,
+      "source_id": "CZ-A0-M03-L01-PH001",
+      "cs_exact": "Jaké máte telefonní číslo?",
+      "text_sha256": "19828bf7bfd34ec1ed60364df52945058b19a92fb48a0160e10f6b6822f403bd",
+      "gemini_wav_sha256": "a860290c55c9701e6c34a9481d75281a83772bd1599fdaa1fad7e8ca0ef0a7f9",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 14,
+      "source_id": "CZ-A0-M03-L02-PH002",
+      "cs_exact": "Stojí to dvacet korun.",
+      "text_sha256": "4f14ec8c89759a1b3542a45a8ae97672e6784e6a39186628fdd37bf6376648d2",
+      "gemini_wav_sha256": "c2822af5f9a79c1c8c7be20ba43e908506ee7cb6bbf6f36eb090ca2d7577268e",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 15,
+      "source_id": "CZ-A0-M03-L02-PH003",
+      "cs_exact": "Kolik stojí ta voda?",
+      "text_sha256": "d3e6df2d3c03cdab85361e88dbbd66c489dbc1c2c783916fb9301dfe58fb58e4",
+      "gemini_wav_sha256": "31353dae859a59b979175f4306c53ca476e3bc812d325d1e0fbff956f821d469",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 16,
+      "source_id": "CZ-A0-M03-L02-PH005",
+      "cs_exact": "Vezmu si to.",
+      "text_sha256": "054b2718db69fb2abe6deb53b9559ebe041ddb5b0b2db081f83f9c98ef502980",
+      "gemini_wav_sha256": "78ace7b4c289b16def44d417019d09bcedcc0150e7c50f190bfc485ab3a8313a",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 17,
+      "source_id": "CZ-A0-M03-L03-PH001",
+      "cs_exact": "Můžu platit kartou?",
+      "text_sha256": "e95d3f913b8c6927193201c8e800333d043d83519e6ea9ba756a70cea39edf2b",
+      "gemini_wav_sha256": "59269a528c5752cc3b4b87a388bf060329e3a9c7a5388e5c883f7f416b2b2393",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 18,
+      "source_id": "CZ-A0-M03-L03-PH004",
+      "cs_exact": "Účtenku, prosím.",
+      "text_sha256": "ec8c3a3313df2348627b505447a014793e40537e698eef1a2669ed2a7e66bb2f",
+      "gemini_wav_sha256": "99e8061fa6aa20150da09e21cd19e6a33bc95a42750af2aef7918e58eacd0c2c",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 19,
+      "source_id": "CZ-A0-M03-L03-PH005",
+      "cs_exact": "Kolik to dělá celkem?",
+      "text_sha256": "0f79385e8a8df7ad2ba774cff295fdc46504b6818cf59a5b4bef48f6662745b5",
+      "gemini_wav_sha256": "3761635bd1e1bddf63245629aa73291c3426e2e03ed3f762fae1de81c9226ac3",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    },
+    {
+      "index": 20,
+      "source_id": "CZ-A0-M01-L01-PH004",
+      "cs_exact": "Jsem z Mongolska.",
+      "text_sha256": "d12e5e94df47f400714004765a2836caf6a47fa9eda075ec03f51924cc45881f",
+      "gemini_wav_sha256": "afb8d177371cf7b5f9d38254fb565e51ab501bb7c942ea140f1f56e131ceab49",
+      "gemini_style": "natural",
+      "gemini_voice": "Achernar",
+      "chirp_voice": "cs-CZ-Chirp3-HD-Achernar"
+    }
+  ]
+}
