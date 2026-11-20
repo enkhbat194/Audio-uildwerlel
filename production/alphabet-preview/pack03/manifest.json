@@ -307,7 +307,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "HLEP",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Hlap!",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-I",
@@ -361,5 +363,7 @@
       "asrExact": true,
       "repoPath": "production/alphabet-preview/pack03/I__sound_in_word.wav"
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 0
 }

@@ -135,8 +135,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "14e20e36fbe490472a6e987d95751567b979ef6be4a313e4c16cb1182539ab86",
       "durationMs": 1320,
       "bytes": 71068,
@@ -156,7 +156,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Koň.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "kůň",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack05/N_CARON__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-O",
@@ -283,7 +286,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "To on!",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Tóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóó",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-P",
@@ -361,5 +366,7 @@
       "asrExact": true,
       "repoPath": "production/alphabet-preview/pack05/P__sound_in_word.wav"
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 1
 }

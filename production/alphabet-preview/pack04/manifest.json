@@ -65,8 +65,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "cce0223d7cbf518435564e3a8765edd1866f4b9d9dfb40fddffa1cf7120f8e19",
       "durationMs": 1280,
       "bytes": 69148,
@@ -86,7 +86,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "mýr",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Mír.",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack04/I_ACUTE__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-J",
@@ -386,5 +389,7 @@
       "asrExact": true,
       "repoPath": "production/alphabet-preview/pack04/M__sound_in_word.wav"
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 1
 }

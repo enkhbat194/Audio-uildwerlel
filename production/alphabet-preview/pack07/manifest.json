@@ -243,7 +243,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Hud.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "chud",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-U",
@@ -318,7 +320,11 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Ulit se!",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Úlice",
+      "mediumAsrExact": false
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 0
 }

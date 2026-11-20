@@ -1,0 +1,73 @@
+{
+  "originalRun": 44748388026,
+  "asrModel": "medium",
+  "additionalTtsCalls": 0,
+  "publicationAllowed": false,
+  "checked": 15,
+  "promoted": 7,
+  "unresolved": [
+    {
+      "pack": "pack02",
+      "letter": "D",
+      "reason": "medium_mismatch",
+      "heard": "Důůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůů"
+    },
+    {
+      "pack": "pack02",
+      "letter": "Ď",
+      "reason": "medium_mismatch",
+      "heard": "Lodě!"
+    },
+    {
+      "pack": "pack02",
+      "letter": "E",
+      "reason": "technical"
+    },
+    {
+      "pack": "pack03",
+      "letter": "H",
+      "reason": "technical"
+    },
+    {
+      "pack": "pack03",
+      "letter": "CH",
+      "reason": "medium_mismatch",
+      "heard": "Hlap!"
+    },
+    {
+      "pack": "pack05",
+      "letter": "Ó",
+      "reason": "medium_mismatch",
+      "heard": "Tóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóó"
+    },
+    {
+      "pack": "pack06",
+      "letter": "Q",
+      "reason": "medium_mismatch",
+      "heard": "Kinoa."
+    },
+    {
+      "pack": "pack07",
+      "letter": "Ť",
+      "reason": "medium_mismatch",
+      "heard": "chud"
+    },
+    {
+      "pack": "pack07",
+      "letter": "U",
+      "reason": "medium_mismatch",
+      "heard": "Úlice"
+    },
+    {
+      "pack": "pack08",
+      "letter": "Ů",
+      "reason": "medium_mismatch",
+      "heard": "Důůůům."
+    },
+    {
+      "pack": "pack08",
+      "letter": "W",
+      "reason": "technical"
+    }
+  ]
+}

@@ -81,7 +81,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Doome.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Důůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůůů",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-Ď",
@@ -156,7 +158,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "LOK",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Lodě!",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-E",
@@ -279,8 +283,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "271c85000a0b792200debde5a7f7513181f7ba426ad43cc32422e364d939edb9",
       "durationMs": 1280,
       "bytes": 69148,
@@ -300,7 +304,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Leto!",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "léto",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack02/E_ACUTE__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-Ě",
@@ -359,8 +366,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "866f9cc36294a2650072c4586371a4bd39e91f65c226dbc7ad5ccf1f79dc05f7",
       "durationMs": 1240,
       "bytes": 67228,
@@ -380,7 +387,12 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Mně 100.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Město.",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack02/E_CARON__sound_in_word.wav"
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 2
 }

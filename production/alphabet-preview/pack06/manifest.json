@@ -86,7 +86,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Kinoa",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Kinoa.",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-R",
@@ -216,8 +218,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "25305d61f56e8410f1cdc51bac4b69c8c15dfaeb34f0362869a7ccfdb5945f02",
       "durationMs": 1120,
       "bytes": 61468,
@@ -237,7 +239,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "řeká.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Řeka.",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack06/R_CARON__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-S",
@@ -315,5 +320,7 @@
       "asrExact": true,
       "repoPath": "production/alphabet-preview/pack06/S__sound_in_word.wav"
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 1
 }

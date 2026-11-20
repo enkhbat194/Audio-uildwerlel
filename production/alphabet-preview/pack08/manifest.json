@@ -60,8 +60,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "18dde80300e3f9262e2acf83cd9b14a70663fa6a075f723a3e83da14cc41fccb",
       "durationMs": 1440,
       "bytes": 76828,
@@ -81,7 +81,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "U-KAL",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Úkol.",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack08/U_ACUTE__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-Ů",
@@ -156,7 +159,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Doom!",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Důůůům.",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-V",
@@ -210,8 +215,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "da467b962b9ab6761e2db424ef1689cefd20eeb4a028d3517f34177e9abed51d",
       "durationMs": 1120,
       "bytes": 61468,
@@ -231,7 +236,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Vodá.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Voda.",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack08/V__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-W",
@@ -302,5 +310,7 @@
         "max_internal_pause_seconds": 0
       }
     }
-  ]
+  ],
+  "mediumQaOriginalRun": 44748388026,
+  "mediumQaPromoted": 2
 }
