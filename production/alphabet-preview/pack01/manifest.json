@@ -206,8 +206,8 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_MEDIUM",
       "audioSha256": "0ccef26391b15ae0e46215f13b2174accba7360bb596d8043b68f4fa8807ad7a",
       "durationMs": 1160,
       "bytes": 63388,
@@ -227,7 +227,10 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "BANAN",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Banán",
+      "mediumAsrExact": true,
+      "repoPath": "production/alphabet-preview/pack01/B__sound_in_word.wav"
     },
     {
       "sourceId": "CZ-ALPHA-C",
@@ -296,7 +299,9 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Sena.",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Cená.",
+      "mediumAsrExact": false
     },
     {
       "sourceId": "CZ-ALPHA-Č",
@@ -371,7 +376,11 @@
         "max_internal_pause_seconds": 0
       },
       "asrText": "Čáj!",
-      "asrExact": false
+      "asrExact": false,
+      "mediumAsrText": "Čai!",
+      "mediumAsrExact": false
     }
-  ]
+  ],
+  "mediumQaRecheckOriginalRun": 44747265771,
+  "mediumQaPromoted": 1
 }
