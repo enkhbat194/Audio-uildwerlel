@@ -57,3 +57,5 @@ jobs:
           path: production/alphabet-preview/medium-qa-report.json
           retention-days: 30
           if-no-files-found: warn
+
+# One-time offline recovery after original eight-pack run completed; no TTS.
