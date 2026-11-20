@@ -301,7 +301,39 @@
       "asrText": "Sena.",
       "asrExact": false,
       "mediumAsrText": "Cená.",
-      "mediumAsrExact": false
+      "mediumAsrExact": false,
+      "repairAttempts": [
+        {
+          "attempt": 1,
+          "sourceId": "CZ-ALPHA-C",
+          "csExact": "cena",
+          "textSha256": "507f8ded27f5b96fa908bd9bba10996849b4d189c235b117df15c3e73624623e",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "a3c0c70e48818b364fd74fccbb794da875b045918d80b14e4abde4645ef78ffa",
+          "durationMs": 1080,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "a3c0c70e48818b364fd74fccbb794da875b045918d80b14e4abde4645ef78ffa",
+            "duration_seconds": 1.08,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -19.63,
+            "peak_dbfs": -1.42,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.5833,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Tzená.",
+          "asrMedium": "Cená.",
+          "decision": "QUARANTINED_REPAIR"
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-Č",
@@ -355,9 +387,9 @@
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
-      "audioSha256": "b0b204e1350142932b6c11467b0e469be7e321ed9566f36f28fdb4fb28ec59bd",
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_REPAIR",
+      "audioSha256": "92f4291e6b14bf89210d100f86d339f360c217a2cd25241fee75c1d70ccb7fdf",
       "durationMs": 1080,
       "bytes": 59548,
       "technical": {
@@ -378,9 +410,73 @@
       "asrText": "Čáj!",
       "asrExact": false,
       "mediumAsrText": "Čai!",
-      "mediumAsrExact": false
+      "mediumAsrExact": false,
+      "repoPath": "production/alphabet-preview/pack01/C_CARON__sound_in_word.wav",
+      "repairSource": "gemini-3.8-flash-tts",
+      "repairQa": {
+        "attempt": 2,
+        "sourceId": "CZ-ALPHA-Č",
+        "csExact": "čaj",
+        "textSha256": "eb4a73079a237cd7e15543dc0026aa0cc16e2ae8f39a951b5c6a06dc578b03c5",
+        "model": "gemini-3.8-flash-tts",
+        "voice": "Achernar",
+        "nativeApproved": false,
+        "publicationAllowed": false,
+        "audioSha256": "92f4291e6b14bf89210d100f86d339f360c217a2cd25241fee75c1d70ccb7fdf",
+        "durationMs": 1080,
+        "technical": {
+          "technical_pass": true,
+          "reasons": [],
+          "sha256": "92f4291e6b14bf89210d100f86d339f360c217a2cd25241fee75c1d70ccb7fdf",
+          "duration_seconds": 1.08,
+          "sample_rate": 24000,
+          "channels": 1,
+          "bit_depth": 16,
+          "rms_dbfs": -20.44,
+          "peak_dbfs": -1.05,
+          "clipped_fraction": 0.0,
+          "silent_window_fraction": 0.5833,
+          "internal_pauses": [],
+          "max_internal_pause_seconds": 0
+        },
+        "asrSmall": "Čaj.",
+        "decision": "AUTO_PASS_REPAIR"
+      },
+      "repairAttempts": [
+        {
+          "attempt": 2,
+          "sourceId": "CZ-ALPHA-Č",
+          "csExact": "čaj",
+          "textSha256": "eb4a73079a237cd7e15543dc0026aa0cc16e2ae8f39a951b5c6a06dc578b03c5",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "92f4291e6b14bf89210d100f86d339f360c217a2cd25241fee75c1d70ccb7fdf",
+          "durationMs": 1080,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "92f4291e6b14bf89210d100f86d339f360c217a2cd25241fee75c1d70ccb7fdf",
+            "duration_seconds": 1.08,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -20.44,
+            "peak_dbfs": -1.05,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.5833,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Čaj.",
+          "decision": "AUTO_PASS_REPAIR"
+        }
+      ]
     }
   ],
   "mediumQaRecheckOriginalRun": 44747265771,
-  "mediumQaPromoted": 1
+  "mediumQaPromoted": 1,
+  "repairAttemptedCalls": 2,
+  "repairAtUtc": "2026-11-20T14:05:23.658790+00:00"
 }
