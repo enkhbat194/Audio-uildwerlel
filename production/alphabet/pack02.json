@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P02",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "D",
+      "slug": "D",
+      "name": "Písmeno D.",
+      "word": "dům"
+    },
+    {
+      "id": "Ď",
+      "slug": "D_CARON",
+      "name": "Písmeno Ď, ď s háčkem.",
+      "word": "loď"
+    },
+    {
+      "id": "E",
+      "slug": "E",
+      "name": "Písmeno E.",
+      "word": "pes"
+    },
+    {
+      "id": "É",
+      "slug": "E_ACUTE",
+      "name": "Písmeno É, dlouhé é.",
+      "word": "léto"
+    },
+    {
+      "id": "Ě",
+      "slug": "E_CARON",
+      "name": "Písmeno Ě, ě s háčkem.",
+      "word": "město"
+    }
+  ]
+}
