@@ -158,18 +158,18 @@
       "sourceId": "CZ-ALPHA-H",
       "letterId": "H",
       "kind": "letter_name",
-      "csExact": "Písmeno H.",
-      "textSha256": "5a9d7878dd267e8537b592c48fd5ed52dde27b7402f27da31065a6d4399bdc31",
+      "csExact": "Písmeno H, há.",
+      "textSha256": "cddb47e0b0df9554cf81a3c5087551e86a885391603fc212a633f0033ca4f94e",
       "sourceVersion": "cz-alphabet-pack-v1",
       "packId": "CZ-ALPHA-P03",
       "model": "gemini-3.8-flash-tts",
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_TECHNICAL",
-      "audioSha256": "afd12dc9984591969f7d096d7ac47f19fc46d739623097c0a46b1c6b905d3056",
-      "durationMs": 1880,
+      "previewAllowed": true,
+      "decision": "TECHNICAL_PREVIEW_CONTEXT",
+      "audioSha256": "c77832e5623c0367869e66dc53c23085a5dd8cfa0fb9eec3fa456f30a5eb7a77",
+      "durationMs": 3160,
       "bytes": 97948,
       "technical": {
         "technical_pass": false,
@@ -187,24 +187,71 @@
         "silent_window_fraction": 0.2698,
         "internal_pauses": [],
         "max_internal_pause_seconds": 0
-      }
+      },
+      "targetWord": "hrad",
+      "repoPath": "production/alphabet-preview/pack03/H__letter_name.wav",
+      "contextFallback": true,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-H",
+          "pack": "pack03",
+          "kind": "letter_name",
+          "targetWord": "hrad",
+          "csExact": "Písmeno H, há.",
+          "textSha256": "cddb47e0b0df9554cf81a3c5087551e86a885391603fc212a633f0033ca4f94e",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "c77832e5623c0367869e66dc53c23085a5dd8cfa0fb9eec3fa456f30a5eb7a77",
+          "durationMs": 3160,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "c77832e5623c0367869e66dc53c23085a5dd8cfa0fb9eec3fa456f30a5eb7a77",
+            "duration_seconds": 3.16,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -15.73,
+            "peak_dbfs": 0.0,
+            "clipped_fraction": 0.001806,
+            "silent_window_fraction": 0.3868,
+            "internal_pauses": [
+              {
+                "from_seconds": 1.02,
+                "to_seconds": 1.2,
+                "duration_seconds": 0.18
+              },
+              {
+                "from_seconds": 1.72,
+                "to_seconds": 2.42,
+                "duration_seconds": 0.7
+              }
+            ],
+            "max_internal_pause_seconds": 0.7
+          },
+          "decision": "TECHNICAL_PREVIEW_CONTEXT",
+          "previewAllowed": true
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-H",
       "letterId": "H",
       "kind": "sound_in_word",
-      "csExact": "hrad",
-      "textSha256": "3ab86784c31fb561905a4f87c9c4c6c2c5d0de03305d8326e1153527fed144a6",
+      "csExact": "Tady je starý hrad.",
+      "textSha256": "97118b81f2681c233ec3e682c565e707b4a612c02295ec8141b1655854ec08e8",
       "sourceVersion": "cz-alphabet-pack-v1",
       "packId": "CZ-ALPHA-P03",
       "model": "gemini-3.8-flash-tts",
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_TECHNICAL",
-      "audioSha256": "1c2362d59ab5961aeee2df8fd3b8404a28ae1dba5d4293e44c6ee9962f0a656a",
-      "durationMs": 1240,
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_CONTEXT",
+      "audioSha256": "1ebe0bcbb7266ec3dea2f69d6954827f6607b3df15f7b6dc2a4106d6ae4282d2",
+      "durationMs": 2040,
       "bytes": 67228,
       "technical": {
         "technical_pass": false,
@@ -222,7 +269,44 @@
         "silent_window_fraction": 0.619,
         "internal_pauses": [],
         "max_internal_pause_seconds": 0
-      }
+      },
+      "targetWord": "hrad",
+      "repoPath": "production/alphabet-preview/pack03/H__sound_in_word.wav",
+      "contextFallback": true,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-H",
+          "pack": "pack03",
+          "kind": "sound_in_word",
+          "targetWord": "hrad",
+          "csExact": "Tady je starý hrad.",
+          "textSha256": "97118b81f2681c233ec3e682c565e707b4a612c02295ec8141b1655854ec08e8",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "1ebe0bcbb7266ec3dea2f69d6954827f6607b3df15f7b6dc2a4106d6ae4282d2",
+          "durationMs": 2040,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "1ebe0bcbb7266ec3dea2f69d6954827f6607b3df15f7b6dc2a4106d6ae4282d2",
+            "duration_seconds": 2.04,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -17.8,
+            "peak_dbfs": -1.09,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.3824,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Tady je starý hrad.",
+          "decision": "AUTO_PASS_CONTEXT",
+          "previewAllowed": true
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-CH",
@@ -309,7 +393,42 @@
       "asrText": "HLEP",
       "asrExact": false,
       "mediumAsrText": "Hlap!",
-      "mediumAsrExact": false
+      "mediumAsrExact": false,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-CH",
+          "pack": "pack03",
+          "kind": "sound_in_word",
+          "targetWord": "chléb",
+          "csExact": "Dám si čerstvý chléb.",
+          "textSha256": "4e141fa0b7e1dc849138c8cb05c33aab465b93420dab5c9ea29dc5347931717b",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "d8c728b38949376e595ae0c121326b79893df5747649c7097ecea47b3dc1d00f",
+          "durationMs": 2160,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "d8c728b38949376e595ae0c121326b79893df5747649c7097ecea47b3dc1d00f",
+            "duration_seconds": 2.16,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -17.11,
+            "peak_dbfs": -1.71,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.2778,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Dám si čerstvý chleb.",
+          "asrMedium": "Dám si čerstvý chlép.",
+          "decision": "QUARANTINED_CONTEXT",
+          "previewAllowed": false
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-I",
@@ -403,5 +522,6 @@
     }
   ],
   "mediumQaOriginalRun": 44748388026,
-  "mediumQaPromoted": 0
+  "mediumQaPromoted": 0,
+  "contextFallbackAttempted": true
 }

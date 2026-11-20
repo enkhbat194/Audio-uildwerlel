@@ -270,18 +270,18 @@
       "sourceId": "CZ-ALPHA-C",
       "letterId": "C",
       "kind": "sound_in_word",
-      "csExact": "cena",
-      "textSha256": "507f8ded27f5b96fa908bd9bba10996849b4d189c235b117df15c3e73624623e",
+      "csExact": "Jaká je cena?",
+      "textSha256": "6224cb2166777298cb2ceaff0385c0170f3748dc7dde88f490bc506c1f1b26c4",
       "sourceVersion": "cz-alphabet-pack-v1",
       "packId": "CZ-ALPHA-P01",
       "model": "gemini-3.8-flash-tts",
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
-      "audioSha256": "fd4947b58ff16e36d02bb2a7e68a364d47e349294fcf5806d411512d990ddb8f",
-      "durationMs": 840,
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_CONTEXT",
+      "audioSha256": "dfdcdb28f8597025a3254c341d0e4c92e0996984d5870e5030229304baaf4599",
+      "durationMs": 1520,
       "bytes": 48028,
       "technical": {
         "technical_pass": true,
@@ -332,6 +332,43 @@
           "asrSmall": "Tzená.",
           "asrMedium": "Cená.",
           "decision": "QUARANTINED_REPAIR"
+        }
+      ],
+      "targetWord": "cena",
+      "repoPath": "production/alphabet-preview/pack01/C__sound_in_word.wav",
+      "contextFallback": true,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-C",
+          "pack": "pack01",
+          "kind": "sound_in_word",
+          "targetWord": "cena",
+          "csExact": "Jaká je cena?",
+          "textSha256": "6224cb2166777298cb2ceaff0385c0170f3748dc7dde88f490bc506c1f1b26c4",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "dfdcdb28f8597025a3254c341d0e4c92e0996984d5870e5030229304baaf4599",
+          "durationMs": 1520,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "dfdcdb28f8597025a3254c341d0e4c92e0996984d5870e5030229304baaf4599",
+            "duration_seconds": 1.52,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -18.52,
+            "peak_dbfs": -1.76,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.2941,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Jaká je cena?",
+          "decision": "AUTO_PASS_CONTEXT",
+          "previewAllowed": true
         }
       ]
     },
@@ -478,5 +515,6 @@
   "mediumQaRecheckOriginalRun": 44747265771,
   "mediumQaPromoted": 1,
   "repairAttemptedCalls": 2,
-  "repairAtUtc": "2026-11-20T14:05:23.658790+00:00"
+  "repairAtUtc": "2026-11-20T14:05:23.658790+00:00",
+  "contextFallbackAttempted": true
 }

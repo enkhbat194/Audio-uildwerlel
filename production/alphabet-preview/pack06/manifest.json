@@ -88,7 +88,42 @@
       "asrText": "Kinoa",
       "asrExact": false,
       "mediumAsrText": "Kinoa.",
-      "mediumAsrExact": false
+      "mediumAsrExact": false,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-Q",
+          "pack": "pack06",
+          "kind": "sound_in_word",
+          "targetWord": "quinoa",
+          "csExact": "Tohle je quinoa.",
+          "textSha256": "2be68d4b0c5bf889585e86fc4f05858dbd6a81021c130184c31b3ba65017ff6c",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "37c07fee6e23f125eb54736201dd353da29c1d4b1be2e31d7500ee2d0e4b6fa2",
+          "durationMs": 1560,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "37c07fee6e23f125eb54736201dd353da29c1d4b1be2e31d7500ee2d0e4b6fa2",
+            "duration_seconds": 1.56,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -17.05,
+            "peak_dbfs": -1.8,
+            "clipped_fraction": 0.0,
+            "silent_window_fraction": 0.3846,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Tohle je kinoa.",
+          "asrMedium": "Tohle je Kinoa.",
+          "decision": "QUARANTINED_CONTEXT",
+          "previewAllowed": false
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-R",
@@ -322,5 +357,6 @@
     }
   ],
   "mediumQaOriginalRun": 44748388026,
-  "mediumQaPromoted": 1
+  "mediumQaPromoted": 1,
+  "contextFallbackAttempted": true
 }

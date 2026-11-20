@@ -305,18 +305,18 @@
       "sourceId": "CZ-ALPHA-Ó",
       "letterId": "Ó",
       "kind": "sound_in_word",
-      "csExact": "tón",
-      "textSha256": "24d55e5da7428d026c3e04aa941afac03581fc4f4d20146feae0c8aca446d9de",
+      "csExact": "Slyším vysoký tón.",
+      "textSha256": "e7aba8837ed1b0d3421d96192b10d98e07f3d8d15929bd9ddc25c39f58d8030d",
       "sourceVersion": "cz-alphabet-pack-v1",
       "packId": "CZ-ALPHA-P05",
       "model": "gemini-3.8-flash-tts",
       "voice": "Achernar",
       "nativeApproved": false,
       "publishAllowed": false,
-      "previewAllowed": false,
-      "decision": "QUARANTINED_ASR",
-      "audioSha256": "9bc3970eb75c1badf2e7d3234f3126f42a6bf18f04a8c58c81a8e69cb2d68c28",
-      "durationMs": 1240,
+      "previewAllowed": true,
+      "decision": "AUTO_PASS_CONTEXT",
+      "audioSha256": "97cdf84cdce88325b92b637d9cf9794c9dafa34e01ba82279e9acf25e15c31dc",
+      "durationMs": 2240,
       "bytes": 67228,
       "technical": {
         "technical_pass": true,
@@ -336,7 +336,44 @@
       "asrText": "To on!",
       "asrExact": false,
       "mediumAsrText": "Tóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóóó",
-      "mediumAsrExact": false
+      "mediumAsrExact": false,
+      "targetWord": "tón",
+      "repoPath": "production/alphabet-preview/pack05/O_ACUTE__sound_in_word.wav",
+      "contextFallback": true,
+      "contextFallbackAttempts": [
+        {
+          "sourceId": "CZ-ALPHA-Ó",
+          "pack": "pack05",
+          "kind": "sound_in_word",
+          "targetWord": "tón",
+          "csExact": "Slyším vysoký tón.",
+          "textSha256": "e7aba8837ed1b0d3421d96192b10d98e07f3d8d15929bd9ddc25c39f58d8030d",
+          "model": "gemini-3.8-flash-tts",
+          "voice": "Achernar",
+          "nativeApproved": false,
+          "publicationAllowed": false,
+          "audioSha256": "97cdf84cdce88325b92b637d9cf9794c9dafa34e01ba82279e9acf25e15c31dc",
+          "durationMs": 2240,
+          "technical": {
+            "technical_pass": true,
+            "reasons": [],
+            "sha256": "97cdf84cdce88325b92b637d9cf9794c9dafa34e01ba82279e9acf25e15c31dc",
+            "duration_seconds": 2.24,
+            "sample_rate": 24000,
+            "channels": 1,
+            "bit_depth": 16,
+            "rms_dbfs": -17.21,
+            "peak_dbfs": 0.0,
+            "clipped_fraction": 3.7e-05,
+            "silent_window_fraction": 0.2933,
+            "internal_pauses": [],
+            "max_internal_pause_seconds": 0
+          },
+          "asrSmall": "Slyším vysoký tón.",
+          "decision": "AUTO_PASS_CONTEXT",
+          "previewAllowed": true
+        }
+      ]
     },
     {
       "sourceId": "CZ-ALPHA-P",
@@ -416,5 +453,6 @@
     }
   ],
   "mediumQaOriginalRun": 44748388026,
-  "mediumQaPromoted": 1
+  "mediumQaPromoted": 1,
+  "contextFallbackAttempted": true
 }
