@@ -910,3 +910,89 @@ jobs:
             production/alphabet-preview/pack01/
           retention-days: 30
           if-no-files-found: warn
+
+
+  alphabet-packs02-09-qa-preview:
+    name: "Alphabet pack ${{ matrix.pack }}: bounded Gemini 3.8 + offline Czech QA"
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): alphabet packs02-09 bounded 74 Gemini calls'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        pack: ['02','03','04','05','06','07','08','09']
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate frozen Czech source and 8–10-call cap
+        run: |
+          python3 -m py_compile scripts/generate_alphabet_pack.py
+          python3 scripts/generate_alphabet_pack.py --pack "pack${{ matrix.pack }}"
+      - name: Authenticate with existing workflow-locked Google WIF
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Install offline Czech Whisper
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Generate genuine Gemini clips, QA every WAV, no automatic retries
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_ALPHABET_OUT: ${{ runner.temp }}/ahoj-alphabet
+          GITHUB_ACTIONS: 'true'
+        run: |
+          python3 scripts/generate_alphabet_pack.py --pack "pack${{ matrix.pack }}" --generate
+      - name: Commit only SHA-locked QA Preview assets, never native release
+        run: |
+          set -euo pipefail
+          test -s "production/alphabet-preview/pack${{ matrix.pack }}/manifest.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p="production/alphabet-preview/pack${{ matrix.pack }}/manifest.json"
+          d=json.loads(Path(p).read_text())
+          assert d['publicationAllowed'] is False
+          assert d['attemptedCalls']<=d['maxBillableCalls']<=10
+          for row in d['rows']:
+              assert row['nativeApproved'] is False
+              if row['previewAllowed']:
+                  assert row['decision'] in ('TECHNICAL_PREVIEW','AUTO_PASS')
+                  assert Path(row['repoPath']).is_file()
+          print('PREVIEW_QA_GATE_OK',d['packId'],
+                sum(x['previewAllowed'] for x in d['rows']), 'of',d['attemptedCalls'])
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "production/alphabet-preview/pack${{ matrix.pack }}"
+          git commit -m "audio(assets): Czech pack${{ matrix.pack }} QA Preview [skip ci]"
+          git fetch origin experiment/free-hosting-render-20261118
+          git rebase origin/experiment/free-hosting-render-20261118
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Keep full original WAV/QA receipts for quarantined audio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-alphabet-pack${{ matrix.pack }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ahoj-alphabet/pack${{ matrix.pack }}/
+            production/alphabet-preview/pack${{ matrix.pack }}/
+          retention-days: 30
+          if-no-files-found: warn
