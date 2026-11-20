@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P04",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "Í",
+      "slug": "I_ACUTE",
+      "name": "Písmeno Í, dlouhé měkké í.",
+      "word": "mír"
+    },
+    {
+      "id": "J",
+      "slug": "J",
+      "name": "Písmeno J.",
+      "word": "jméno"
+    },
+    {
+      "id": "K",
+      "slug": "K",
+      "name": "Písmeno K.",
+      "word": "káva"
+    },
+    {
+      "id": "L",
+      "slug": "L",
+      "name": "Písmeno L.",
+      "word": "les"
+    },
+    {
+      "id": "M",
+      "slug": "M",
+      "name": "Písmeno M.",
+      "word": "máma"
+    }
+  ]
+}
