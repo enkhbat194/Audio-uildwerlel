@@ -1,0 +1,36 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P08",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 8,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "Ú",
+      "slug": "U_ACUTE",
+      "name": "Písmeno Ú, dlouhé ú.",
+      "word": "úkol"
+    },
+    {
+      "id": "Ů",
+      "slug": "U_RING",
+      "name": "Písmeno Ů, ů s kroužkem.",
+      "word": "dům"
+    },
+    {
+      "id": "V",
+      "slug": "V",
+      "name": "Písmeno V.",
+      "word": "voda"
+    },
+    {
+      "id": "W",
+      "slug": "W",
+      "name": "Písmeno W, dvojité vé.",
+      "word": "web"
+    }
+  ]
+}
