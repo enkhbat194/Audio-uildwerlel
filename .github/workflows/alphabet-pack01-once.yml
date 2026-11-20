@@ -1,0 +1,89 @@
+name: Ahoj Audio Factory - Czech Alphabet Pack 01 (one-shot)
+
+# First letter pack: 5 letter names + 5 example words.
+# This is a single owner-authorized generation run, NEVER an automatic recurring job.
+on:
+  push:
+    branches:
+      - experiment/free-hosting-render-20261118
+    paths:
+      - .github/workflows/alphabet-pack01-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  alphabet-pack01:
+    name: Generate at most 10 Gemini 3.8 Czech WAVs — private PREVIEW QA
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): alphabet pack01 10 Gemini calls once' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact fixed branch
+        uses: actions/checkout@v4
+      - name: Install offline Czech audio QA dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Verify alphabet source and bound of 10 before any paid call
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_alphabet_pack.py --pack pack01
+          python3 - <<'PY'
+          import json
+          path='production/alphabet/pack01.json'
+          d=json.load(open(path,encoding='utf-8'))
+          assert [a['id'] for a in d['letters']]==['A','Á','B','C','Č']
+          assert [a['word'] for a in d['letters']]==['auto','máma','banán','cena','čaj']
+          assert d['max_billable_calls']==10
+          assert d['no_automatic_retry'] is True
+          assert d['model']=='gemini-3.8-flash-tts'
+          assert d['scope']=='PREVIEW_ONLY_NO_NATIVE_CERTIFICATION'
+          print('APPROVED_CZECH_PACK01: at most 10 billable calls; no retries; no student publication')
+          PY
+      - name: Authenticate with existing least-privilege GitHub WIF identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Generate exact 10 Czech letter-name and example-word WAV candidates
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_ALPHABET_OUT: ${{ runner.temp }}/ahoj-alphabet-qa
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_alphabet_pack.py --pack pack01 --generate
+          python3 - <<'PY'
+          import json, pathlib,os
+          data=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'ahoj-alphabet-qa/pack01/receipt.json')))
+          assert data['attemptedCalls'] <= 10
+          assert data['nativeApproved'] is False and data['publicationAllowed'] is False
+          assert all(r.get('model')=='gemini-3.8-flash-tts' for r in data['rows'])
+          print('PACK01_RECEIPT_COUNTS',json.dumps({
+              'attempted':data['attemptedCalls'],
+              'preview':sum(1 for r in data['rows'] if r.get('previewAllowed')),
+              'failed':sum(1 for r in data['rows'] if r.get('decision')=='GENERATION_FAILED')
+          }))
+          PY
+      - name: Archive real WAVs + SHA receipts, including quarantines — private Actions artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-czech-alphabet-pack01-qa-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ahoj-alphabet-qa/pack01/
+            production/alphabet-preview/pack01/
+          retention-days: 30
+          if-no-files-found: warn
