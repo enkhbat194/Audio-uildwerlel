@@ -836,3 +836,77 @@ jobs:
             production/alphabet-preview/pack01/
           retention-days: 30
           if-no-files-found: warn
+
+  alphabet-pack01-authorized:
+    name: Alphabet Pack01 - 10 bounded Gemini 3.8 WAV candidates (authorized WIF workflow)
+    needs: readiness
+    if: >-
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event_name == 'push' &&
+      github.event.head_commit.message == 'audio(run): pack01 via approved WIF workflow exactly once' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 5-letter source and no-more-than-ten TTS budget (no cloud)
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_alphabet_pack.py --pack pack01
+          python3 - <<'PY'
+          import json
+          p=json.load(open('production/alphabet/pack01.json',encoding='utf-8'))
+          assert [r['id'] for r in p['letters']]==['A','Á','B','C','Č']
+          assert [r['word'] for r in p['letters']]==['auto','máma','banán','cena','čaj']
+          assert p['max_billable_calls']==10 and p['no_automatic_retry'] is True
+          assert p['model']=='gemini-3.8-flash-tts'
+          assert p['scope']=='PREVIEW_ONLY_NO_NATIVE_CERTIFICATION'
+          print('CZECH_PACK01_BOUNDED_TTS_10_APPROVED')
+          PY
+      - name: Existing exact-workflow and branch-bound Google WIF identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Install independent Czech ASR QA engine
+        run: python3 -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==18.1.0'
+      - name: Generate true Gemini 3.8 Czech letter/name and word WAVs, no automatic retry
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_ALPHABET_OUT: ${{ runner.temp }}/ahoj-alphabet-pack01
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_alphabet_pack.py --pack pack01 --generate
+          python3 - <<'PY'
+          import json,os
+          p=os.path.join(os.environ['RUNNER_TEMP'],'ahoj-alphabet-pack01/pack01/receipt.json')
+          r=json.load(open(p))
+          assert 0<=r['attemptedCalls']<=10
+          assert r['publicationAllowed'] is False and r['nativeApproved'] is False
+          assert all(x['model']=='gemini-3.8-flash-tts' for x in r['rows'])
+          print('PACK01_GENERATION_RECEIPT:',json.dumps({
+            'attemptedCalls':r['attemptedCalls'],
+            'previewAllowed':sum(x.get('previewAllowed',False) for x in r['rows']),
+            'quarantined':sum(x['decision'].startswith('QUARANTINED') for x in r['rows']),
+            'failed':sum(x['decision']=='GENERATION_FAILED' for x in r['rows'])}))
+          PY
+      - name: Keep WAVs, immutable SHA and quarantine receipts as QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahoj-pack01-verified-gemini38-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ahoj-alphabet-pack01/pack01/
+            production/alphabet-preview/pack01/
+          retention-days: 30
+          if-no-files-found: warn
