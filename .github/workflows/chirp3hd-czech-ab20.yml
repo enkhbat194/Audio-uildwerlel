@@ -59,7 +59,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      AHOJ_CHIRP_AB_OUTPUT_DIR: ${{ runner.temp }}/ahoj-chirp-ab20
+      AHOJ_CHIRP_AB_OUTPUT_DIR: ${{ github.workspace }}/.ahoj-chirp-ab20
     steps:
       - uses: actions/checkout@v4
       - name: Get short-lived GCP access token, never log secret
@@ -99,6 +99,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ahoj-czech-chirp3hd-ab20-${{ github.run_id }}
-          path: ${{ runner.temp }}/ahoj-chirp-ab20/
+          path: ${{ github.workspace }}/.ahoj-chirp-ab20/
           retention-days: 90
           if-no-files-found: warn
