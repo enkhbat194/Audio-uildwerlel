@@ -1066,3 +1066,5 @@ jobs:
           path: ${{ runner.temp }}/alphabet-repair-two/
           retention-days: 30
           if-no-files-found: warn
+
+# One-time pack01 repair trigger: exactly two bounded Czech word attempts; no retry.
