@@ -1,0 +1,127 @@
+{
+  "sourceVersion": "cz-alphabet-pack-v1",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "maxBillableCalls": 13,
+  "noAutomaticRetries": true,
+  "rows": [
+    {
+      "pack": "pack01",
+      "sourceId": "CZ-ALPHA-C",
+      "letterId": "C",
+      "kind": "sound_in_word",
+      "slug": "C",
+      "targetWord": "cena",
+      "csExact": "Jaká je cena?"
+    },
+    {
+      "pack": "pack02",
+      "sourceId": "CZ-ALPHA-D",
+      "letterId": "D",
+      "kind": "sound_in_word",
+      "slug": "D",
+      "targetWord": "dům",
+      "csExact": "To je velký dům."
+    },
+    {
+      "pack": "pack02",
+      "sourceId": "CZ-ALPHA-Ď",
+      "letterId": "Ď",
+      "kind": "sound_in_word",
+      "slug": "D_CARON",
+      "targetWord": "loď",
+      "csExact": "To je velká loď."
+    },
+    {
+      "pack": "pack02",
+      "sourceId": "CZ-ALPHA-E",
+      "letterId": "E",
+      "kind": "sound_in_word",
+      "slug": "E",
+      "targetWord": "pes",
+      "csExact": "To je můj pes."
+    },
+    {
+      "pack": "pack03",
+      "sourceId": "CZ-ALPHA-H",
+      "letterId": "H",
+      "kind": "letter_name",
+      "slug": "H",
+      "targetWord": "hrad",
+      "csExact": "Písmeno H, há."
+    },
+    {
+      "pack": "pack03",
+      "sourceId": "CZ-ALPHA-H",
+      "letterId": "H",
+      "kind": "sound_in_word",
+      "slug": "H",
+      "targetWord": "hrad",
+      "csExact": "Tady je starý hrad."
+    },
+    {
+      "pack": "pack03",
+      "sourceId": "CZ-ALPHA-CH",
+      "letterId": "CH",
+      "kind": "sound_in_word",
+      "slug": "CH",
+      "targetWord": "chléb",
+      "csExact": "Dám si čerstvý chléb."
+    },
+    {
+      "pack": "pack05",
+      "sourceId": "CZ-ALPHA-Ó",
+      "letterId": "Ó",
+      "kind": "sound_in_word",
+      "slug": "O_ACUTE",
+      "targetWord": "tón",
+      "csExact": "Slyším vysoký tón."
+    },
+    {
+      "pack": "pack06",
+      "sourceId": "CZ-ALPHA-Q",
+      "letterId": "Q",
+      "kind": "sound_in_word",
+      "slug": "Q",
+      "targetWord": "quinoa",
+      "csExact": "Tohle je quinoa."
+    },
+    {
+      "pack": "pack07",
+      "sourceId": "CZ-ALPHA-Ť",
+      "letterId": "Ť",
+      "kind": "sound_in_word",
+      "slug": "T_CARON",
+      "targetWord": "chuť",
+      "csExact": "Mám chuť na čaj."
+    },
+    {
+      "pack": "pack07",
+      "sourceId": "CZ-ALPHA-U",
+      "letterId": "U",
+      "kind": "sound_in_word",
+      "slug": "U",
+      "targetWord": "ulice",
+      "csExact": "To je moje ulice."
+    },
+    {
+      "pack": "pack08",
+      "sourceId": "CZ-ALPHA-Ů",
+      "letterId": "Ů",
+      "kind": "sound_in_word",
+      "slug": "U_RING",
+      "targetWord": "dům",
+      "csExact": "To je můj dům."
+    },
+    {
+      "pack": "pack08",
+      "sourceId": "CZ-ALPHA-W",
+      "letterId": "W",
+      "kind": "sound_in_word",
+      "slug": "W",
+      "targetWord": "web",
+      "csExact": "To je náš web."
+    }
+  ]
+}
