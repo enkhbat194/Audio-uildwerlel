@@ -1068,3 +1068,61 @@ jobs:
           if-no-files-found: warn
 
 # One-time pack01 repair trigger: exactly two bounded Czech word attempts; no retry.
+
+
+  alphabet-two-original-429-retry:
+    name: Retry ONLY I and Ó alphabet letter-name 429, two Gemini calls maximum
+    needs: readiness
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'enkhbat194/Audio-uildwerlel' &&
+      github.ref == 'refs/heads/experiment/free-hosting-render-20261118' &&
+      github.event.head_commit.message == 'audio(run): retry two alphabet letter-name 429 once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify bounded retry script
+        run: python3 -m py_compile scripts/retry_alphabet_two_429_names.py
+      - name: Existing workflow-locked WIF identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/814331085807/locations/global/workloadIdentityPools/ahoj-audio-gh/providers/preflight
+          service_account: ahoj-gh-preflight@project-a699c3ff-995a-4b88-add.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1200s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Retry exactly two original 429 missing names, no extra attempts
+        env:
+          AHOJ_GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          AHOJ_429_OUT: ${{ runner.temp }}/ahoj-alphabet-429
+          GITHUB_ACTIONS: 'true'
+        run: python3 scripts/retry_alphabet_two_429_names.py
+      - name: Commit only technically checked Preview WAVs
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add production/alphabet-preview/pack03 production/alphabet-preview/pack05
+          git commit -m 'audio(assets): recovered two alphabet letter names from 429 [skip ci]'
+          git fetch origin experiment/free-hosting-render-20261118
+          git rebase origin/experiment/free-hosting-render-20261118
+          git push origin HEAD:experiment/free-hosting-render-20261118
+      - name: Save quota receipts and failed WAVs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabet-two-429-${{ github.run_id }}
+          path: ${{ runner.temp }}/ahoj-alphabet-429/
+          retention-days: 30
+          if-no-files-found: warn
