@@ -1,0 +1,42 @@
+{
+  "version": "cz-alphabet-pack-v1",
+  "source": "Ahoj-esko/src/data/czechAlphabetCourse.ts@main",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Achernar",
+  "packId": "CZ-ALPHA-P01",
+  "scope": "PREVIEW_ONLY_NO_NATIVE_CERTIFICATION",
+  "max_billable_calls": 10,
+  "no_automatic_retry": true,
+  "letters": [
+    {
+      "id": "A",
+      "slug": "A",
+      "name": "Písmeno A.",
+      "word": "auto"
+    },
+    {
+      "id": "Á",
+      "slug": "A_ACUTE",
+      "name": "Písmeno Á, dlouhé á.",
+      "word": "máma"
+    },
+    {
+      "id": "B",
+      "slug": "B",
+      "name": "Písmeno B.",
+      "word": "banán"
+    },
+    {
+      "id": "C",
+      "slug": "C",
+      "name": "Písmeno C.",
+      "word": "cena"
+    },
+    {
+      "id": "Č",
+      "slug": "C_CARON",
+      "name": "Písmeno Č.",
+      "word": "čaj"
+    }
+  ]
+}
