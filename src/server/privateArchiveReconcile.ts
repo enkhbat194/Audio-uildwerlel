@@ -91,15 +91,17 @@ export async function runPrivateArchiveReconcile(): Promise<void> {
       else matched++;
     }
     let extraHanaJan = 0;
+    const extraInfo: Array<{text:string,voice_id:string,history_item_id:string}> = [];
     for (const [k, hits] of historyByKey) {
       if (!expectedKeys.has(k) && hits.some(h=>['2qbJHyAaz7tHCfVZS6z3','KIDKfqJyZ6ASuyzsKfh5'].includes(h.voice_id || ''))) {
         extraHanaJan += hits.length;
+        for(const item of hits.slice(0,3)) extraInfo.push({text:item.text||'',voice_id:item.voice_id||'',history_item_id:item.history_item_id});
       }
     }
     const report = {
       expected: expected.length, matched_unique: matched, missing_count: missing.length,
       ambiguous_count: ambiguous.length, additional_hana_jan_history: extraHanaJan,
-      history_total_items: historyIds.size, pages, missing_ids: missing.slice(0,30),
+      history_total_items: historyIds.size, pages, extra_items: extraInfo.slice(0,10), missing_ids: missing.slice(0,30),
       ambiguous_ids: ambiguous.slice(0,30), zero_tts: true, app_publish: false
     };
     console.log('[AHOJ_RECONCILE] ' + JSON.stringify(report));
