@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import { createApiRouter } from './src/server/appFactory';
+import { runPrivateArchiveReconcile } from './src/server/privateArchiveReconcile';
 
 
 /**
@@ -125,6 +126,7 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Ahoj Česko — Audio Factory server listening on http://localhost:${PORT}`);
     void runElevenLabsPrivateHistoryProbe();
+    void runPrivateArchiveReconcile();
   });
 }
 
