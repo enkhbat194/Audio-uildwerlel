@@ -1,0 +1,30 @@
+name: Auto Audio G1 offline recovery QA
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/g1/**'
+      - 'tests/test_recover_elevenlabs_history.py'
+      - '.github/workflows/auto-audio-g1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/g1/**'
+      - 'tests/test_recover_elevenlabs_history.py'
+jobs:
+  offline-g1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run tests without any API key
+        run: python -m unittest discover -s tests -p 'test_recover_elevenlabs_history.py' -v
+      - name: Python syntax
+        run: python -m py_compile tools/g1/recover_elevenlabs_history.py
+      - name: Check that private manifest and audio do not exist in the checkout
+        run: |
+          test ! -d private_recovery
+          test ! -f AHOJ_HANA_JAN_246_COMPLETED_PRIVATE_QA_MANIFEST_20261121.json

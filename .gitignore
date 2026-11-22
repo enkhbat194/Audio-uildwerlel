@@ -7,3 +7,14 @@ coverage/
 .env*
 !.env.example
 .data/
+# AUTO AUDIO v1.2: PRIVATE source/archive/receipts must never enter public GitHub.
+private_recovery/
+private_audio/
+*.mp3
+*.wav
+*.download
+HISTORY_MATCH_REPORT.json
+EXPORT_RECEIPT.json
+AHOJ_HANA_JAN_*.zip
+AHOJ_HANA_JAN_*MANIFEST*.json
+AHOJ_HANA_JAN_*TRACKER*.json
