@@ -21,6 +21,7 @@ async function runElevenLabsPrivateHistoryProbe() {
     'KIDKfqJyZ6ASuyzsKfh5'  // Jan
   ]);
   const counts = { total: 0, hana: 0, jan: 0, other: 0, pages: 0 };
+  const sampleHistoryIds: string[] = [];
   let cursor: string | undefined;
   const seen = new Set<string>();
   try {
@@ -46,6 +47,7 @@ async function runElevenLabsPrivateHistoryProbe() {
       for (const item of history) {
         if (typeof item.history_item_id !== 'string' || seen.has(item.history_item_id)) continue;
         seen.add(item.history_item_id);
+        if (expectedVoices.has(item.voice_id) && sampleHistoryIds.length < 2) sampleHistoryIds.push(item.history_item_id);
         counts.total++;
         if (item.voice_id === '2qbJHyAaz7tHCfVZS6z3') counts.hana++;
         else if (item.voice_id === 'KIDKfqJyZ6ASuyzsKfh5') counts.jan++;
@@ -55,6 +57,28 @@ async function runElevenLabsPrivateHistoryProbe() {
       cursor = result.last_history_item_id;
     }
     console.log('[AHOJ_HISTORY_PROBE] completed=' + JSON.stringify(counts) + ' expected_hana_jan=246 private=true no_tts=true');
+    if (sampleHistoryIds.length === 2) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      try {
+        const response = await fetch('https://api.elevenlabs.io/v1/history/download', {
+          method: 'POST',
+          headers: { 'xi-api-key': apiKey, 'content-type': 'application/json' },
+          body: JSON.stringify({ history_item_ids: sampleHistoryIds }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          console.log('[AHOJ_HISTORY_DOWNLOAD_PROBE] request_failed status=' + response.status);
+        } else {
+          const binary = new Uint8Array(await response.arrayBuffer());
+          const zipValid = binary.length > 4 && binary[0] === 0x50 && binary[1] === 0x4b;
+          console.log('[AHOJ_HISTORY_DOWNLOAD_PROBE] status=' + (zipValid ? 'zip_verified' : 'invalid_zip') + ' items_requested=2 bytes=' + binary.length + ' no_tts=true no_publishing=true');
+        }
+      } catch (error) {
+        console.log('[AHOJ_HISTORY_DOWNLOAD_PROBE] error=' + (error instanceof Error ? error.name : 'unknown'));
+      } finally { clearTimeout(timeout); }
+    }
+
   } catch (error) {
     console.log('[AHOJ_HISTORY_PROBE] network_or_parse_error type=' + (error instanceof Error ? error.name : 'unknown'));
   }
