@@ -3,6 +3,63 @@ import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import { createApiRouter } from './src/server/appFactory';
 
+
+/**
+ * PRIVATE READ-ONLY ElevenLabs history audit.
+ * Never triggers TTS or writes/deletes anything. Never prints credentials or source texts.
+ * Runs only on the isolated free-hosting proof service when explicitly enabled.
+ */
+async function runElevenLabsPrivateHistoryProbe() {
+  if (process.env.AUDIO_ARCHIVE_ONLY !== 'true') return;
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey || process.env.FREE_HOSTING_POC !== 'true') {
+    console.log('[AHOJ_HISTORY_PROBE] skipped: archive key or read-only isolation missing');
+    return;
+  }
+  const expectedVoices = new Set([
+    '2qbJHyAaz7tHCfVZS6z3',  // Hana
+    'KIDKfqJyZ6ASuyzsKfh5'  // Jan
+  ]);
+  const counts = { total: 0, hana: 0, jan: 0, other: 0, pages: 0 };
+  let cursor: string | undefined;
+  const seen = new Set<string>();
+  try {
+    for (let page = 0; page < 12; page++) {
+      const u = new URL('https://api.elevenlabs.io/v1/history');
+      u.searchParams.set('page_size', '100');
+      u.searchParams.set('source', 'Flows');
+      u.searchParams.set('date_after_unix', String(Math.floor(Date.parse('2026-11-20T00:00:00Z') / 1000)));
+      if (cursor) u.searchParams.set('start_after_history_item_id', cursor);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      let response: Response;
+      try {
+        response = await fetch(u, { headers: { 'xi-api-key': apiKey }, signal: controller.signal });
+      } finally { clearTimeout(timeout); }
+      if (!response.ok) {
+        console.log('[AHOJ_HISTORY_PROBE] request_failed status=' + response.status + ' (no key shown)');
+        return;
+      }
+      const result: any = await response.json();
+      const history: any[] = Array.isArray(result.history) ? result.history : [];
+      counts.pages++;
+      for (const item of history) {
+        if (typeof item.history_item_id !== 'string' || seen.has(item.history_item_id)) continue;
+        seen.add(item.history_item_id);
+        counts.total++;
+        if (item.voice_id === '2qbJHyAaz7tHCfVZS6z3') counts.hana++;
+        else if (item.voice_id === 'KIDKfqJyZ6ASuyzsKfh5') counts.jan++;
+        else counts.other++;
+      }
+      if (!result.has_more || !result.last_history_item_id || result.last_history_item_id === cursor) break;
+      cursor = result.last_history_item_id;
+    }
+    console.log('[AHOJ_HISTORY_PROBE] completed=' + JSON.stringify(counts) + ' expected_hana_jan=246 private=true no_tts=true');
+  } catch (error) {
+    console.log('[AHOJ_HISTORY_PROBE] network_or_parse_error type=' + (error instanceof Error ? error.name : 'unknown'));
+  }
+}
+
 const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
@@ -43,6 +100,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Ahoj Česko — Audio Factory server listening on http://localhost:${PORT}`);
+    void runElevenLabsPrivateHistoryProbe();
   });
 }
 
