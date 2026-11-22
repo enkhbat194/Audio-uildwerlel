@@ -38,10 +38,10 @@ class TestPrivateG1(unittest.TestCase):
             with self.assertRaises(ValueError):
                 g1.valid_manifest(p, 1)
 
-    def test_exact_matching_needs_voice_model_flow(self):
+    def test_exact_matching_needs_voice_and_model(self):
         self.assertEqual(g1.match_manifest([item()], [history()], True)[0]["status"], "matched")
         self.assertEqual(g1.match_manifest([item()], [history(voice="jan")], True)[0]["status"], "missing")
-        self.assertEqual(g1.match_manifest([item()], [history(source="TTS")], True)[0]["status"], "missing")
+        self.assertEqual(g1.match_manifest([item()], [history(source="TTS")], True)[0]["status"], "matched")
 
     def test_ambiguous_is_not_guessed(self):
         found = g1.match_manifest([item()], [history("H1"), history("H2")], True)
