@@ -104,12 +104,13 @@ def match_manifest(rows, history, scanned_all):
     for row in rows:
         pair = (exact(row["cs_exact"]), row["voice_id"], row["model"])
         matches = by_key.get(pair, [])
-        # Flow-origin proof: if source metadata exists, do not accept non-Flow items.
-        matches = [x for x in matches if x.get("source") in ("Flows", "flows")]
+        # History source uses TTS/Projects/etc.; it does not reliably label
+        # creative Flow node provenance. Never infer that 'source' must be 'Flows'.
+        # If several exact text+voice+model candidates remain, block ambiguity.
         if row.get("history_item_id"):
             matches = [x for x in matches if x["history_item_id"] == row["history_item_id"]]
         if len(matches) == 1:
-            result.append({"source_id": row["source_id"], "status": "matched", "history_item_id": matches[0]["history_item_id"], "file_name": row["output_file_expected_name"], "origin": "Flows"})
+            result.append({"source_id": row["source_id"], "status": "matched", "history_item_id": matches[0]["history_item_id"], "file_name": row["output_file_expected_name"], "origin": matches[0].get("source", "unknown")})
         elif len(matches) > 1:
             result.append({"source_id": row["source_id"], "status": "ambiguous", "candidate_history_ids": [x["history_item_id"] for x in matches]})
         else:
