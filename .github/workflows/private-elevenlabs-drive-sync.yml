@@ -1,0 +1,57 @@
+name: AHOJ private audio sync
+on:
+  push:
+    branches: [feat/private-elevenlabs-drive-sync]
+    paths:
+      - .github/workflows/private-elevenlabs-drive-sync.yml
+      - scripts/sync-elevenlabs-private-drive.mjs
+      - scripts/sync-elevenlabs-private-drive.test.mjs
+  workflow_dispatch:
+    inputs:
+      archive:
+        type: boolean
+        description: 'Archive matching existing MP3s privately; no TTS'
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ahoj-private-audio-sync
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test sync without real credentials
+        run: node --test scripts/sync-elevenlabs-private-drive.test.mjs
+      - name: Check private archive credentials and live connection
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          AHOJ_DRIVE_FOLDER_ID: '1_TfQwRJmy4T7dyArcFl_jTLMMuYT3mVf'
+          AHOJ_PREVIOUS_INDEX_FILE_ID: '1XmJToPAQ7vGUlPkkcBO0OM_mWZ2KKKRF'
+          AHOJ_SYNC_TEXTS_JSON: '["Dobrý den.","Ahoj!","Na shledanou.","Jmenuji se","Jmenuji se Anna.","Jsem","Jsem Petr.","Těší mě.","Dobrý den. Jmenuji se Anna.","Dobrý den. Jmenuji se Petr.","Dobrý den. Jsem Petr.","Jmenuji se Petr.","Jak se jmenujete?","A vy?","Dobrý den. Jak se jmenujete?","Jmenuji se Anna. A vy?","Těší mě. Na shledanou.","Jmenuji se Petr. A vy?","Jsem Anna. A vy?"]'
+          AHOJ_PRIVATE_SYNC_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.archive == true && 'true' || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in ELEVENLABS_API_KEY GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_OAUTH_REFRESH_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "MISSING: $name"
+              missing=1
+            else
+              echo "PRESENT: $name"
+            fi
+          done
+          if [ "$missing" = 1 ]; then
+            echo "LIVE_SYNC_BLOCKED: credentials not configured. No real audio downloaded."
+            exit 1
+          fi
+          node scripts/sync-elevenlabs-private-drive.mjs
