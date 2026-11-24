@@ -56,7 +56,7 @@ export async function syncPrivateArchive(e=process.env,request=fetch){
  const id=h.history_item_id;
  try{
  // Recheck idempotency immediately before write (single cloud worker required).
- const q=new URL(drive+'/files');q.searchParams.set('q',"'"+esc(folder)+"' in parents and trashed = false and appProperties has { key='history_id' and value='"+esc(id)+"' }");q.searchParams.set('fields','files(id,size,md5Checksum,appProperties)');const d=await (await callDrive(q)).json();if((d.files||[]).length){report.skipped++;continue;}
+ const q=new URL(drive+'/files');q.searchParams.set('q',"'"+esc(folder)+"' in parents and trashed = false and appProperties has { key='history_id' and value='"+esc(id)+"' }");q.searchParams.set('fields','files(id,size,md5Checksum,appProperties)');const d=await (await callDrive(q)).json();if((d.files||[]).length){if(d.files.length!==1||!d.files[0].appProperties?.sha256||d.files[0].md5Checksum!==d.files[0].appProperties?.md5||!(Number(d.files[0].size)>0))throw Error('EXISTING_RECEIPT_CONFLICT');report.skipped++;continue;}
  const res=await checked(await request(endpoint+'/history/'+encodeURIComponent(id)+'/audio',{headers:{'xi-api-key':key},signal:timeout()}),'AUDIO');
  const mime=(res.headers.get('content-type')||'').split(';')[0];if(!['audio/mpeg','audio/mp3','application/octet-stream'].includes(mime))throw Error('INVALID_AUDIO_TYPE');
  const b=Buffer.from(await res.arrayBuffer());if(b.length>20_000_000||!mp3(b))throw Error('INVALID_MP3');
